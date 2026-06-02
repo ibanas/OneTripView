@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-slate-50 text-ink antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+}
+
+@layer utilities {
+  /* Hide the inline-edit input chrome so editing feels seamless */
+  .inline-input {
+    @apply bg-transparent outline-none border-b border-transparent focus:border-sky-500 focus:bg-sky-50/40 rounded-sm px-0.5 -mx-0.5 transition-colors;
+  }
+}
+
+/* Smooth fade-in for newly rendered cards */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-in {
+  animation: fadeInUp 0.25s ease-out both;
+}
