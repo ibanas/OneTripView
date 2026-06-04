@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DropZone from './components/DropZone.jsx';
 import EmptyState from './components/EmptyState.jsx';
 import ProcessingQueue from './components/ProcessingQueue.jsx';
@@ -20,6 +20,7 @@ import { buildResolver, bookingHasPerson } from './lib/people.js';
 import { extractBookingsFromPdf } from './lib/extract.js';
 import { exportToExcel } from './lib/exportExcel.js';
 import { exportToPdf } from './lib/exportPdf.js';
+import { exportBackup, readBackup } from './lib/backup.js';
 
 const newId = () =>
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -118,6 +119,30 @@ export default function App() {
 
   const deleteBooking = (id) => setBookings((prev) => prev.filter((b) => b.id !== id));
 
+  // ---- Backup (JSON export / import) ----
+  const importRef = useRef(null);
+
+  const onImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const data = await readBackup(file);
+      // Merge (additive, id-based) so importing restores on a new device and
+      // never clobbers edits on an existing one.
+      setBookings((prev) => {
+        const ids = new Set(prev.map((b) => b.id));
+        return [...prev, ...data.bookings.filter((b) => !ids.has(b.id))];
+      });
+      setPeople((prev) => {
+        const ids = new Set(prev.map((p) => p.id));
+        return [...prev, ...data.people.filter((p) => !ids.has(p.id))];
+      });
+    } catch (err) {
+      alert(err.message || 'Could not import that file.');
+    }
+  };
+
   const hasContent = bookings.length > 0 || jobs.length > 0;
 
   return (
@@ -199,9 +224,36 @@ export default function App() {
           </div>
         )}
 
-        <footer className="mt-10 pb-6 text-center text-xs text-slate-400">
-          Saved locally in your browser · {bookings.length} booking
-          {bookings.length === 1 ? '' : 's'}
+        <footer className="mt-10 pb-8 text-center text-xs text-slate-400">
+          <p>
+            Saved locally in your browser · {bookings.length} booking
+            {bookings.length === 1 ? '' : 's'}
+          </p>
+          <div className="mt-2 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => exportBackup(bookings, people)}
+              disabled={bookings.length === 0 && people.length === 0}
+              className="font-medium text-slate-500 hover:text-sky-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Export backup
+            </button>
+            <span aria-hidden="true">·</span>
+            <button
+              type="button"
+              onClick={() => importRef.current?.click()}
+              className="font-medium text-slate-500 hover:text-sky-600 hover:underline"
+            >
+              Import backup
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={onImportFile}
+            />
+          </div>
         </footer>
       </main>
 

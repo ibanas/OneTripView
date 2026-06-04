@@ -1,4 +1,5 @@
 import { SYSTEM_PROMPT, MODEL } from './prompt.js';
+import { isAuthorized } from './auth.js';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MAX_BODY_BYTES = 64 * 1024 * 1024; // 64 MB — multi-page PDFs as base64 images get large
@@ -47,6 +48,7 @@ export function anthropicExtractPlugin(env = {}) {
   // Accept the key from the real process environment first, then from any
   // Vite-loaded .env value passed in.
   const apiKey = process.env.ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY;
+  const passphrase = process.env.APP_PASSPHRASE || env.APP_PASSPHRASE;
 
   return {
     name: 'anthropic-extract-middleware',
@@ -54,6 +56,12 @@ export function anthropicExtractPlugin(env = {}) {
       server.middlewares.use('/api/extract', async (req, res) => {
         if (req.method !== 'POST') {
           sendJson(res, 405, { error: 'Method not allowed. Use POST.' });
+          return;
+        }
+
+        // Passphrase gate (open if APP_PASSPHRASE is unset).
+        if (!(await isAuthorized(req.headers['x-app-passphrase'], passphrase))) {
+          sendJson(res, 401, { error: 'Unauthorized. Enter the app passphrase.' });
           return;
         }
 

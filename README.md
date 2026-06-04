@@ -106,11 +106,50 @@ an **interactive trip map**, a **vertical day-by-day timeline**, colored
 If you're offline, the map shows a friendly notice and photos fall back to
 gradients — extraction, editing, filtering, and export all keep working.
 
+## Use it on your phone — deploy to Vercel
+
+The same `/api/extract` proxy is provided two ways: a Vite middleware for local
+dev (`server/extractPlugin.js`) and a Vercel serverless function for production
+(`api/extract.js`) — both share `server/prompt.js` and `server/auth.js`, so the
+front-end is identical in both. To put it on your phone:
+
+1. **Push to GitHub** (already done for this repo).
+2. On [vercel.com](https://vercel.com), **Add New → Project → Import** your
+   GitHub repo. Framework preset = **Vite** (build `npm run build`, output
+   `dist`) — these are auto-detected.
+3. In **Project → Settings → Environment Variables**, add:
+   - `ANTHROPIC_API_KEY` — your key (**no** `VITE_` prefix).
+   - `APP_PASSPHRASE` — a long random phrase. **Strongly recommended**: a public
+     deploy without this lets anyone who finds the URL spend your API budget.
+4. **Deploy.** Open the URL on your phone. The app asks for the passphrase once
+   (then remembers it on that device).
+
+**Install as an app (PWA):** in your phone browser, use **Add to Home Screen**.
+You get a full-screen, app-like icon, and your saved itinerary is **viewable
+offline** (e.g. on a plane). Extraction still needs a connection.
+
+**Payload note:** Vercel caps request bodies at 4.5 MB, so the client renders
+pages to JPEG and **chunks large PDFs** into batches automatically — nothing to
+configure. (The local dev middleware has a 64 MB limit, so test very long PDFs
+against a Vercel preview, not just `npm run dev`.)
+
+> Prefer Cloudflare Pages or Netlify? Cloudflare allows larger bodies but has a
+> 10 ms CPU limit on its free tier; Netlify's free tier caps function time at
+> 10 s, which is too short for vision calls. Vercel's free tier (300 s
+> functions) is the smoothest fit.
+
+## Move a trip between devices
+
+Use **Export backup** / **Import backup** in the footer to download or restore a
+JSON file containing all bookings **and** your traveler-merge settings. Import is
+additive (it won't clobber existing data), so it works both for restoring on a
+fresh device and merging.
+
 ## Notes
 
 - `npm audit` flags a high-severity advisory in `xlsx` (the SheetJS build
   published to npm). It was requested for this project; if it matters for your
   use, SheetJS recommends installing from their CDN tarball instead.
-- Extraction requires the dev server (for the `/api/extract` middleware).
-  `npm run build` / `npm run preview` produce the static front-end but do not
-  include the extraction proxy.
+- Local `npm run dev` extraction uses the Vite middleware; the deployed app uses
+  `api/extract.js`. The passphrase gate is **open** when `APP_PASSPHRASE` is
+  unset (convenient for local dev) and **enforced** once you set it.
