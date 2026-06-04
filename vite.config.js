@@ -11,6 +11,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
+    // Pin the dev port so the origin (and therefore localStorage) is stable
+    // between runs. If 5173 is busy, Vite will error instead of silently moving
+    // to another port — close the other dev server rather than splitting data.
+    server: { port: 5173, strictPort: true },
+    preview: { port: 4173, strictPort: true },
     plugins: [
       react(),
       anthropicExtractPlugin(env),

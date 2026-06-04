@@ -50,3 +50,21 @@ export function savePeople(people) {
     /* ignore quota */
   }
 }
+
+/**
+ * Ask the browser to mark our storage "persistent" so it isn't evicted under
+ * pressure (matters most for installed PWAs on iOS/Android). Best-effort; safe
+ * to call on every startup.
+ */
+export async function requestPersistentStorage() {
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      const already = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+      if (!already) return await navigator.storage.persist();
+      return true;
+    }
+  } catch {
+    /* not supported — ignore */
+  }
+  return false;
+}
