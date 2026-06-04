@@ -1,8 +1,8 @@
 import * as XLSX from 'xlsx';
-import { sortBookings, TYPE_LABELS } from './bookings.js';
+import { sortBookings, TYPE_LABELS, CATEGORY_LABELS } from './bookings.js';
 import { resolveTravelers } from './people.js';
 
-/** One row per booking, Travelers (canonical names) as a comma-separated column. */
+/** One row per booking/place, Travelers (canonical names) comma-separated. */
 export function exportToExcel(bookings, resolver) {
   const names = (b) =>
     resolver
@@ -11,6 +11,7 @@ export function exportToExcel(bookings, resolver) {
 
   const rows = sortBookings(bookings).map((b) => ({
     Type: TYPE_LABELS[b.type] || b.type,
+    Category: b.type === 'place' ? CATEGORY_LABELS[b.category] || b.category : '',
     Title: b.title,
     Location: b.location,
     'Start Date': b.startDate,
@@ -19,12 +20,14 @@ export function exportToExcel(bookings, resolver) {
     'End Time': b.endTime || '',
     Travelers: names(b).join(', '),
     'Confirmation #': b.confirmationNumber || '',
+    Link: b.url || '',
     Notes: b.notes || '',
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows, {
     header: [
       'Type',
+      'Category',
       'Title',
       'Location',
       'Start Date',
@@ -33,12 +36,14 @@ export function exportToExcel(bookings, resolver) {
       'End Time',
       'Travelers',
       'Confirmation #',
+      'Link',
       'Notes',
     ],
   });
 
   ws['!cols'] = [
     { wch: 8 }, // Type
+    { wch: 12 }, // Category
     { wch: 26 }, // Title
     { wch: 28 }, // Location
     { wch: 12 }, // Start Date
@@ -47,6 +52,7 @@ export function exportToExcel(bookings, resolver) {
     { wch: 10 }, // End Time
     { wch: 30 }, // Travelers
     { wch: 16 }, // Confirmation #
+    { wch: 40 }, // Link
     { wch: 40 }, // Notes
   ];
 

@@ -81,6 +81,13 @@ Then open the URL Vite prints (usually http://localhost:5173).
   into one identity, rename them, or split them apart. Comes pre-seeded so the
   bundled name groups merge automatically.
 - **Add a booking manually** with the **Add** button.
+- **Add places to check** with the **Place** button (or "+ add a spot" per city):
+  paste a Google Maps share link, a restaurant website, or an event page. Full
+  Maps links auto-fill the name + drop an exact map pin; other links get a name
+  you can edit. Places form a **"Places to check in {city}" shortlist** and show
+  as **category-colored map pins** — give one a date to also pin it onto the day
+  timeline. (A server-side "unfurl" enhancement resolves short `maps.app.goo.gl`
+  links and grabs a page photo; it fails silently so adding always works.)
 - **Delete** a booking with the trash icon on its card.
 - **Export** to Excel (one row per booking, travelers comma-separated, using the
   merged names) or to a printable, day-grouped PDF.

@@ -7,8 +7,11 @@ import TripMap from './components/TripMap.jsx';
 import Timeline from './components/Timeline.jsx';
 import ManagePeople from './components/ManagePeople.jsx';
 import SyncModal from './components/SyncModal.jsx';
+import PlacesToCheck from './components/PlacesToCheck.jsx';
+import AddPlaceModal from './components/AddPlaceModal.jsx';
 import {
   PlusIcon,
+  PinIcon,
   SheetIcon,
   DocIcon,
   CloudIcon,
@@ -63,6 +66,7 @@ export default function App() {
   const [jobs, setJobs] = useState([]);
   const [activePerson, setActivePerson] = useState(null);
   const [showManage, setShowManage] = useState(false);
+  const [addPlace, setAddPlace] = useState(null); // null = closed; { city } = open
 
   // Sync
   const [syncCode, setSyncCodeState] = useState(getSyncCode);
@@ -89,6 +93,31 @@ export default function App() {
     if (!activePerson) return liveBookings;
     return liveBookings.filter((b) => bookingHasPerson(b, activePerson, resolver));
   }, [liveBookings, activePerson, resolver]);
+
+  // Timeline shows person-filtered real bookings + all SCHEDULED places. Places
+  // are person-agnostic, so they bypass the traveler filter (otherwise a
+  // scheduled place would silently vanish when you filter by a person).
+  const timelineBookings = useMemo(
+    () => [
+      ...visibleBookings.filter((b) => b.type !== 'place'),
+      ...liveBookings.filter((b) => b.type === 'place' && b.startDate),
+    ],
+    [visibleBookings, liveBookings]
+  );
+  // Undated places form the shortlist; all places (dated or not) get map pins.
+  const shortlistPlaces = useMemo(
+    () => liveBookings.filter((b) => b.type === 'place' && !b.startDate),
+    [liveBookings]
+  );
+  const placePins = useMemo(
+    () => liveBookings.filter((b) => b.type === 'place'),
+    [liveBookings]
+  );
+  const cityNames = useMemo(() => {
+    const set = new Set(cities.map((c) => c.name).filter(Boolean));
+    for (const p of placePins) if (p.location) set.add(p.location);
+    return [...set];
+  }, [cities, placePins]);
 
   useEffect(() => {
     if (activePerson && !summary.people.some((p) => p.key === activePerson)) {
@@ -117,8 +146,12 @@ export default function App() {
       const remote = await pullRemote(code, interactive);
       const cur = stateRef.current;
       // Always run the merge (with [] when there's no remote) so tombstone GC
-      // and de-duplication apply even on the first push.
-      const mergedBookings = mergeBookings(cur.bookings, remote ? remote.bookings || [] : []);
+      // and de-duplication apply even on the first push. Re-normalize so a
+      // synced record passes the same sanitizers (e.g. url http/https-only) as
+      // every other ingress path.
+      const mergedBookings = mergeBookings(cur.bookings, remote ? remote.bookings || [] : []).map(
+        normalizeBooking
+      );
       const picked = remote
         ? pickPeople({ people: cur.people, peopleUpdatedAt: cur.peopleTs }, remote)
         : { people: cur.people, peopleUpdatedAt: cur.peopleTs };
@@ -273,6 +306,11 @@ export default function App() {
     schedulePush();
   };
 
+  const commitPlace = (raw) => {
+    setBookings((prev) => [...prev, normalizeBooking(raw)]);
+    schedulePush();
+  };
+
   const applyPeople = (next) => {
     setPeople(next);
     setPeopleTs(nowIso());
@@ -355,6 +393,15 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={() => setAddPlace({ city: '' })}
+              aria-label="Add a place to check"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+            >
+              <PinIcon className="h-4 w-4 text-emerald-600" />
+              <span className="hidden sm:inline">Place</span>
+            </button>
+            <button
+              type="button"
               onClick={() => exportToExcel(liveBookings, resolver)}
               disabled={liveBookings.length === 0}
               aria-label="Export to Excel"
@@ -393,15 +440,24 @@ export default function App() {
               />
             )}
 
-            {liveBookings.length > 0 && stops.length > 0 && <TripMap stops={stops} />}
+            {(stops.length > 0 || placePins.length > 0) && (
+              <TripMap stops={stops} places={placePins} />
+            )}
 
             <DropZone onFiles={handleFiles} compact />
 
             <ProcessingQueue jobs={jobs} onRetry={retryJob} onDismiss={dismissJob} />
 
-            {liveBookings.length > 0 && (
+            <PlacesToCheck
+              places={shortlistPlaces}
+              onChange={updateBooking}
+              onDelete={deleteBooking}
+              onAddPlace={(city) => setAddPlace({ city })}
+            />
+
+            {timelineBookings.length > 0 && (
               <Timeline
-                bookings={visibleBookings}
+                bookings={timelineBookings}
                 resolver={resolver}
                 onChange={updateBooking}
                 onDelete={deleteBooking}
@@ -461,6 +517,15 @@ export default function App() {
           onStop={stopSync}
           onSyncNow={() => doFullSync(true)}
           onClose={() => setShowSync(false)}
+        />
+      )}
+
+      {addPlace && (
+        <AddPlaceModal
+          presetCity={addPlace.city}
+          cities={cityNames}
+          onAdd={commitPlace}
+          onClose={() => setAddPlace(null)}
         />
       )}
     </div>

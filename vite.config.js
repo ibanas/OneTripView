@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { anthropicExtractPlugin } from './server/extractPlugin.js'
 import { syncPlugin } from './server/syncPlugin.js'
+import { unfurlPlugin } from './server/unfurlPlugin.js'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -21,6 +22,7 @@ export default defineConfig(({ mode }) => {
       react(),
       anthropicExtractPlugin(env),
       syncPlugin(env),
+      unfurlPlugin(env),
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',

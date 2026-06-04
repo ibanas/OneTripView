@@ -35,6 +35,17 @@ export const TYPE_STYLES = {
     soft: 'bg-amber-50',
     text: 'text-amber-700',
   },
+  place: {
+    label: 'Place',
+    hex: '#059669', // emerald-600
+    ring: 'ring-emerald-100',
+    badge: 'bg-emerald-50 text-emerald-700',
+    icon: 'text-emerald-600',
+    accent: 'bg-emerald-500',
+    dot: 'bg-emerald-500',
+    soft: 'bg-emerald-50',
+    text: 'text-emerald-700',
+  },
   other: {
     label: 'Other',
     hex: '#475569', // slate-600
@@ -47,6 +58,20 @@ export const TYPE_STYLES = {
     text: 'text-slate-600',
   },
 };
+
+// Per-category accent colors for place pins/badges.
+export const CATEGORY_HEX = {
+  restaurant: '#ea580c', // orange-600
+  cafe: '#a16207', // yellow-700
+  sight: '#0891b2', // cyan-600
+  event: '#db2777', // pink-600
+  shop: '#7c3aed', // violet-600
+  other: '#059669', // emerald-600
+};
+
+export function categoryHex(category) {
+  return CATEGORY_HEX[category] || CATEGORY_HEX.other;
+}
 
 export function typeStyle(type) {
   return TYPE_STYLES[type] || TYPE_STYLES.other;

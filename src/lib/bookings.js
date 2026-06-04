@@ -3,12 +3,25 @@
 import { distinctPeople } from './people.js';
 import { cleanPlace } from './geocode.js';
 
-export const BOOKING_TYPES = ['flight', 'hotel', 'airbnb', 'other'];
+export const BOOKING_TYPES = ['flight', 'hotel', 'airbnb', 'place', 'other'];
 
 export const TYPE_LABELS = {
   flight: 'Flight',
   hotel: 'Hotel',
   airbnb: 'Rental',
+  place: 'Place',
+  other: 'Other',
+};
+
+// Categories for "places to check" (restaurants, sights, events…).
+export const PLACE_CATEGORIES = ['restaurant', 'cafe', 'sight', 'event', 'shop', 'other'];
+
+export const CATEGORY_LABELS = {
+  restaurant: 'Restaurant',
+  cafe: 'Café / Bar',
+  sight: 'Sight',
+  event: 'Event',
+  shop: 'Shop',
   other: 'Other',
 };
 
@@ -38,6 +51,12 @@ export function normalizeBooking(raw = {}) {
     travelers: dedupeNames(travelers),
     confirmationNumber: str(raw.confirmationNumber) || null,
     notes: str(raw.notes) || null,
+    // "Place" fields (only meaningful for type 'place', harmless otherwise).
+    url: urlStr(raw.url),
+    category: PLACE_CATEGORIES.includes(raw.category) ? raw.category : 'other',
+    lat: numOrNull(raw.lat),
+    lng: numOrNull(raw.lng),
+    image: str(raw.image) || null,
     // Sync metadata: updatedAt orders per-id merges; deleted is a tombstone so
     // deletions propagate across devices (filtered out of the UI). Data that
     // predates this field gets an epoch sentinel so any real edit/delete (which
@@ -58,6 +77,18 @@ export function emptyBooking() {
   });
 }
 
+/** A blank "place to check", optionally pre-bound to a destination city. */
+export function emptyPlace(city = '') {
+  return normalizeBooking({
+    type: 'place',
+    title: '',
+    location: city,
+    category: 'other',
+    startDate: '',
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 function str(v) {
   if (v === null || v === undefined) return '';
   return String(v).trim();
@@ -73,6 +104,23 @@ function dateStr(v) {
 function timeStr(v) {
   const s = str(v);
   return /^\d{2}:\d{2}$/.test(s) ? s : null;
+}
+
+// Keep only http/https URLs (blocks javascript:/data: from reaching an href).
+function urlStr(v) {
+  const s = str(v);
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? s : null;
+  } catch {
+    return null;
+  }
+}
+
+function numOrNull(v) {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** Case-insensitive de-dupe that preserves the first-seen spelling. */
@@ -121,7 +169,8 @@ function nightsBetween(start, end) {
 
 /** Trip-wide summary shown in the header. `resolver` collapses name aliases. */
 export function summarize(bookings, resolver) {
-  const dated = bookings.filter((b) => b.startDate);
+  // Places don't define the trip's date span, even when scheduled.
+  const dated = bookings.filter((b) => b.startDate && b.type !== 'place');
   const dates = dated
     .flatMap((b) => [b.startDate, b.endDate])
     .filter(Boolean)
@@ -136,6 +185,7 @@ export function summarize(bookings, resolver) {
     .filter((b) => b.type === 'hotel' || b.type === 'airbnb')
     .reduce((sum, b) => sum + nightsBetween(b.startDate, b.endDate), 0);
 
+  const places = bookings.filter((b) => b.type === 'place').length;
   const people = resolver ? distinctPeople(bookings, resolver) : [];
 
   return {
@@ -144,9 +194,29 @@ export function summarize(bookings, resolver) {
     flights,
     stays,
     nights,
+    places,
     people, // [{ key, name, aliases }]
     total: bookings.length,
   };
+}
+
+/** Group places by their destination city (city-less → "Unsorted"). */
+export function groupPlacesByCity(places) {
+  const groups = [];
+  const index = new Map();
+  for (const p of places) {
+    const city = placeParts(p.location).name || 'Unsorted';
+    const key = city.toLowerCase();
+    if (!index.has(key)) {
+      const group = { key, city, items: [] };
+      index.set(key, group);
+      groups.push(group);
+    }
+    index.get(key).items.push(p);
+  }
+  for (const g of groups) g.items.sort((a, b) => a.title.localeCompare(b.title));
+  groups.sort((a, b) => a.city.localeCompare(b.city));
+  return groups;
 }
 
 // ---- Location / route parsing (for the route strip and map) ----
@@ -175,6 +245,7 @@ export function placeParts(raw) {
 export function tripStops(bookings) {
   const ordered = [];
   for (const b of sortBookings(bookings)) {
+    if (b.type === 'place') continue; // places are standalone pins, not route nodes
     if (b.type === 'flight') {
       for (const seg of splitRoute(b.location)) ordered.push({ place: seg, type: 'flight', date: b.startDate });
     } else if (b.location) {
@@ -209,6 +280,6 @@ export function primaryDestination(bookings) {
     const segs = splitRoute(flights[flights.length - 1].location);
     if (segs.length) return placeParts(segs[segs.length - 1]).name;
   }
-  const any = bookings.find((b) => b.location);
+  const any = bookings.find((b) => b.location && b.type !== 'place');
   return any ? placeParts(any.location).name : null;
 }

@@ -217,10 +217,78 @@ export function CopyIcon({ className = 'w-4 h-4' }) {
   );
 }
 
+export function ExternalLinkIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M14 5h5v5M19 5l-8 8" />
+      <path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+    </svg>
+  );
+}
+
+export function ForkKnifeIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M5 3v7a2 2 0 0 0 2 2v9M9 3v7M7 3v4" />
+      <path d="M16 3c-1.5 0-2.5 2-2.5 5S15 12 16 12s2.5-1 2.5-4S17.5 3 16 3zM16 12v9" />
+    </svg>
+  );
+}
+
+export function CoffeeIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 9h13v5a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z" />
+      <path d="M17 10h2.5a2.5 2.5 0 0 1 0 5H17M7 5V3M11 5V3" />
+    </svg>
+  );
+}
+
+export function CameraIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M3 8h3l1.5-2h9L18 8h3v11H3z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </svg>
+  );
+}
+
+export function TicketIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H5a2 2 0 0 1-2-2 2 2 0 0 0 0-4z" />
+      <path d="M14 6v2M14 12v2M14 16v0" />
+    </svg>
+  );
+}
+
+export function BagIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M6 8h12l-1 12H7zM9 8V6a3 3 0 0 1 6 0v2" />
+    </svg>
+  );
+}
+
+const CATEGORY_ICONS = {
+  restaurant: ForkKnifeIcon,
+  cafe: CoffeeIcon,
+  sight: CameraIcon,
+  event: TicketIcon,
+  shop: BagIcon,
+  other: PinIcon,
+};
+
+export function CategoryIcon({ category, className }) {
+  const Icon = CATEGORY_ICONS[category] || PinIcon;
+  return <Icon className={className} />;
+}
+
 const TYPE_ICONS = {
   flight: PlaneIcon,
   hotel: BedIcon,
   airbnb: HouseIcon,
+  place: PinIcon,
   other: PinIcon,
 };
 
