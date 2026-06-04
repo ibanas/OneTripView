@@ -202,6 +202,92 @@ function metaContent(html, prop) {
   return m ? decodeEntities(m[1]) : null;
 }
 
+// Reverse-geocode coords to a street address via a FIXED public host (not user
+// input, so no SSRF concern). Best-effort.
+async function reverseGeocode(lat, lng) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { address: null, city: null };
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(
+      lat
+    )}&lon=${encodeURIComponent(lng)}&format=jsonv2&zoom=18&addressdetails=1`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: { 'user-agent': 'OneTripView/1.0 (itinerary app)', accept: 'application/json' },
+      });
+      if (!res.ok) return { address: null, city: null };
+      // Read the body while the abort timer is still armed, so a stalled/
+      // trickling response can't hang past the 4s ceiling.
+      const d = await res.json();
+      const a = d.address || {};
+      const city = a.city || a.town || a.village || a.municipality || a.suburb || null;
+      return { address: d.display_name || null, city };
+    } finally {
+      clearTimeout(t);
+    }
+  } catch {
+    return { address: null, city: null };
+  }
+}
+
+// Pull schema.org structured data (most restaurant/event pages embed it).
+export function extractJsonLd(html) {
+  const out = [];
+  const re = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  let count = 0;
+  while ((m = re.exec(html)) && count < 8) {
+    count += 1;
+    try {
+      const data = JSON.parse(m[1].trim());
+      if (Array.isArray(data)) out.push(...data);
+      else if (data && data['@graph']) out.push(...[].concat(data['@graph']));
+      else if (data) out.push(data);
+    } catch {
+      /* skip malformed block */
+    }
+  }
+  return out;
+}
+
+function formatAddress(addr) {
+  if (!addr) return { address: null, city: null };
+  if (typeof addr === 'string') return { address: addr.trim() || null, city: null };
+  const get = (v) => (typeof v === 'string' ? v.trim() : '');
+  const parts = [
+    get(addr.streetAddress),
+    get(addr.addressLocality),
+    get(addr.addressRegion),
+    get(addr.postalCode),
+    get(addr.addressCountry),
+  ].filter(Boolean);
+  return { address: parts.join(', ') || null, city: get(addr.addressLocality) || null };
+}
+
+export function placeInfoFromJsonLd(objs) {
+  for (const o of objs) {
+    if (!o || typeof o !== 'object') continue;
+    if (o.address) {
+      const { address, city } = formatAddress(o.address);
+      if (address) return { name: typeof o.name === 'string' ? o.name : null, address, city };
+    }
+    if (o.location && o.location.address) {
+      const { address, city } = formatAddress(o.location.address);
+      if (address) {
+        const name =
+          (typeof o.name === 'string' && o.name) ||
+          (typeof o.location.name === 'string' && o.location.name) ||
+          null;
+        return { name, address, city };
+      }
+    }
+  }
+  for (const o of objs) if (o && typeof o.name === 'string') return { name: o.name, address: null, city: null };
+  return { name: null, address: null, city: null };
+}
+
 function parseGmaps(url) {
   const out = { name: null, lat: null, lng: null };
   try {
@@ -235,7 +321,8 @@ export async function unfurl(targetUrl) {
 
   if (/google\.[a-z.]+\/maps|maps\.google\./i.test(finalUrl)) {
     const g = parseGmaps(finalUrl);
-    return { kind: 'gmaps', name: g.name, lat: g.lat, lng: g.lng, finalUrl };
+    const { address, city } = await reverseGeocode(g.lat, g.lng);
+    return { kind: 'gmaps', name: g.name, lat: g.lat, lng: g.lng, address, city, finalUrl };
   }
 
   const ctype = res.headers.get('content-type') || '';
@@ -247,11 +334,17 @@ export async function unfurl(targetUrl) {
   } catch {
     return { kind: 'web', finalUrl };
   }
+
+  const ld = placeInfoFromJsonLd(extractJsonLd(html));
   const titleTag = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || [])[1];
+  const ogStreet = metaContent(html, 'business:contact_data:street_address');
+  const ogCity = metaContent(html, 'business:contact_data:locality');
   return {
     kind: 'web',
-    name: metaContent(html, 'og:title') || (titleTag ? decodeEntities(titleTag) : null),
+    name: ld.name || metaContent(html, 'og:title') || (titleTag ? decodeEntities(titleTag) : null),
     image: metaContent(html, 'og:image'),
+    address: ld.address || (ogStreet ? [ogStreet, ogCity].filter(Boolean).join(', ') : null),
+    city: ld.city || ogCity || null,
     finalUrl,
   };
 }

@@ -18,6 +18,9 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
   const [titleEdited, setTitleEdited] = useState(false);
   const [category, setCategory] = useState('other');
   const [city, setCity] = useState(presetCity);
+  const [cityEdited, setCityEdited] = useState(Boolean(presetCity));
+  const [address, setAddress] = useState('');
+  const [addressEdited, setAddressEdited] = useState(false);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [notes, setNotes] = useState('');
@@ -29,10 +32,14 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
   // Live refs so a user edit DURING an in-flight enrich() always wins the race.
   const titleRef = useRef('');
   const titleEditedRef = useRef(false);
+  const cityEditedRef = useRef(Boolean(presetCity));
+  const addressEditedRef = useRef(false);
   useEffect(() => {
     titleRef.current = title;
     titleEditedRef.current = titleEdited;
-  }, [title, titleEdited]);
+    cityEditedRef.current = cityEdited;
+    addressEditedRef.current = addressEdited;
+  }, [title, titleEdited, cityEdited, addressEdited]);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -65,6 +72,8 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
     if (!r) return;
     // Read the LIVE edit state from refs, not the stale blur-time closure.
     if (r.name && !titleEditedRef.current && !titleRef.current) setTitle(r.name);
+    if (r.address && !addressEditedRef.current) setAddress((a) => a || r.address);
+    if (r.city && !cityEditedRef.current) setCity((c) => c || r.city);
     if (r.lat != null && r.lng != null) setCoords((c) => (c.lat == null ? { lat: r.lat, lng: r.lng } : c));
     if (r.image) setImage((img) => img || r.image);
   };
@@ -78,6 +87,7 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
       type: 'place',
       title: title.trim() || 'Untitled place',
       location: city.trim(),
+      address: address.trim() || null,
       category,
       url: link.trim() || null,
       lat: coords.lat,
@@ -93,7 +103,7 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-[1100] flex items-end justify-center bg-ink/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <form
@@ -196,7 +206,10 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
             </label>
             <input
               value={city}
-              onChange={(e) => setCity(e.target.value)}
+              onChange={(e) => {
+                setCity(e.target.value);
+                setCityEdited(true);
+              }}
               list="place-cities"
               placeholder="e.g. Lisbon"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
@@ -207,6 +220,23 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
                 <option key={c} value={c} />
               ))}
             </datalist>
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">
+              Address (auto-filled from the link when available)
+            </label>
+            <input
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setAddressEdited(true);
+              }}
+              placeholder="Street address"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+              aria-label="Address"
+            />
           </div>
 
           {/* Optional schedule */}

@@ -57,6 +57,7 @@ export function normalizeBooking(raw = {}) {
     lat: numOrNull(raw.lat),
     lng: numOrNull(raw.lng),
     image: str(raw.image) || null,
+    address: str(raw.address) || null,
     // Sync metadata: updatedAt orders per-id merges; deleted is a tombstone so
     // deletions propagate across devices (filtered out of the UI). Data that
     // predates this field gets an epoch sentinel so any real edit/delete (which

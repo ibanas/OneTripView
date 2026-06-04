@@ -52,7 +52,7 @@ export default function TripMap({ stops, places = [] }) {
       places
         .map(
           (p) =>
-            `${p.id}|${p.lat ?? ''}|${p.lng ?? ''}|${cleanPlace(p.location).toLowerCase()}|${p.category}|${p.title}|${p.url || ''}`
+            `${p.id}|${p.lat ?? ''}|${p.lng ?? ''}|${cleanPlace(p.location).toLowerCase()}|${p.category}|${p.title}|${p.url || ''}|${p.address || ''}`
         )
         .join('>'),
     [places]
@@ -91,7 +91,7 @@ export default function TripMap({ stops, places = [] }) {
           }
         }
         if (lat != null && lon != null) {
-          placePts.push({ lat, lon, name: p.title, category: p.category, url: p.url });
+          placePts.push({ lat, lon, name: p.title, category: p.category, url: p.url, address: p.address });
         }
       }
 
@@ -136,12 +136,13 @@ export default function TripMap({ stops, places = [] }) {
 
     // Place markers (round, category-colored).
     for (const p of data.places) {
+      const addr = p.address ? `<br><span style="color:#64748b">${esc(p.address)}</span>` : '';
       const link = p.url
         ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">Open</a>`
         : '';
       L.marker([p.lat, p.lon], { icon: placeIcon(p.category) })
         .addTo(map)
-        .bindPopup(`<b>${esc(p.name)}</b>${link}`);
+        .bindPopup(`<b>${esc(p.name)}</b>${addr}${link}`);
     }
 
     const routeLatLngs = data.route.map((p) => [p.lat, p.lon]);

@@ -67,6 +67,7 @@ export default function App() {
   const [activePerson, setActivePerson] = useState(null);
   const [showManage, setShowManage] = useState(false);
   const [addPlace, setAddPlace] = useState(null); // null = closed; { city } = open
+  const [view, setView] = useState('itinerary'); // 'itinerary' | 'places'
 
   // Sync
   const [syncCode, setSyncCodeState] = useState(getSyncCode);
@@ -104,11 +105,7 @@ export default function App() {
     ],
     [visibleBookings, liveBookings]
   );
-  // Undated places form the shortlist; all places (dated or not) get map pins.
-  const shortlistPlaces = useMemo(
-    () => liveBookings.filter((b) => b.type === 'place' && !b.startDate),
-    [liveBookings]
-  );
+  // All places (dated or not) live on the Places tab and get map pins.
   const placePins = useMemo(
     () => liveBookings.filter((b) => b.type === 'place'),
     [liveBookings]
@@ -289,6 +286,7 @@ export default function App() {
   const addManual = () => {
     setBookings((prev) => [...prev, emptyBooking()]);
     schedulePush();
+    setView('itinerary'); // a manual booking is a flight — show it on the itinerary
   };
 
   const updateBooking = (id, next) => {
@@ -309,6 +307,7 @@ export default function App() {
   const commitPlace = (raw) => {
     setBookings((prev) => [...prev, normalizeBooking(raw)]);
     schedulePush();
+    setView('places'); // jump to the Places tab so the new place is visible
   };
 
   const applyPeople = (next) => {
@@ -336,6 +335,7 @@ export default function App() {
       });
       setPeopleTs(nowIso());
       schedulePush();
+      setView('itinerary'); // surface imported bookings (don't hide behind Places)
     } catch (err) {
       alert(err.message || 'Could not import that file.');
     }
@@ -429,39 +429,96 @@ export default function App() {
           <EmptyState onFiles={handleFiles} onAddManual={addManual} />
         ) : (
           <div className="space-y-5">
-            {liveBookings.length > 0 && (
-              <Hero
-                summary={summary}
-                cities={cities}
-                destination={destination}
-                activePerson={activePerson}
-                onTogglePerson={setActivePerson}
-                onManagePeople={() => setShowManage(true)}
-              />
-            )}
+            {/* Itinerary / Places tabs */}
+            <div className="flex rounded-xl bg-slate-100 p-1 text-sm font-semibold">
+              <button
+                type="button"
+                onClick={() => setView('itinerary')}
+                className={`flex-1 rounded-lg py-1.5 transition-colors ${
+                  view === 'itinerary' ? 'bg-white text-ink shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Itinerary
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('places')}
+                className={`flex-1 rounded-lg py-1.5 transition-colors ${
+                  view === 'places' ? 'bg-white text-ink shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Places{placePins.length > 0 ? ` (${placePins.length})` : ''}
+              </button>
+            </div>
 
-            {(stops.length > 0 || placePins.length > 0) && (
-              <TripMap stops={stops} places={placePins} />
-            )}
+            {view === 'itinerary' ? (
+              <>
+                {liveBookings.length > 0 && (
+                  <Hero
+                    summary={summary}
+                    cities={cities}
+                    destination={destination}
+                    activePerson={activePerson}
+                    onTogglePerson={setActivePerson}
+                    onManagePeople={() => setShowManage(true)}
+                  />
+                )}
 
-            <DropZone onFiles={handleFiles} compact />
+                {(stops.length > 0 || placePins.length > 0) && (
+                  <TripMap stops={stops} places={placePins} />
+                )}
 
-            <ProcessingQueue jobs={jobs} onRetry={retryJob} onDismiss={dismissJob} />
+                <DropZone onFiles={handleFiles} compact />
 
-            <PlacesToCheck
-              places={shortlistPlaces}
-              onChange={updateBooking}
-              onDelete={deleteBooking}
-              onAddPlace={(city) => setAddPlace({ city })}
-            />
+                <ProcessingQueue jobs={jobs} onRetry={retryJob} onDismiss={dismissJob} />
 
-            {timelineBookings.length > 0 && (
-              <Timeline
-                bookings={timelineBookings}
-                resolver={resolver}
-                onChange={updateBooking}
-                onDelete={deleteBooking}
-              />
+                {timelineBookings.length > 0 ? (
+                  <Timeline
+                    bookings={timelineBookings}
+                    resolver={resolver}
+                    onChange={updateBooking}
+                    onDelete={deleteBooking}
+                  />
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-8 text-center text-sm text-slate-400">
+                    Nothing scheduled yet — drop a booking PDF above, or add spots in the{' '}
+                    <button
+                      type="button"
+                      onClick={() => setView('places')}
+                      className="font-semibold text-sky-600 hover:underline"
+                    >
+                      Places
+                    </button>{' '}
+                    tab.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                {placePins.length > 0 && <TripMap stops={[]} places={placePins} />}
+                {placePins.length > 0 ? (
+                  <PlacesToCheck
+                    places={placePins}
+                    onChange={updateBooking}
+                    onDelete={deleteBooking}
+                    onAddPlace={(city) => setAddPlace({ city })}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-10 text-center">
+                    <p className="text-sm text-slate-500">
+                      No places yet. Paste a Google Maps, restaurant, or event link to start a
+                      shortlist for each destination.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setAddPlace({ city: '' })}
+                      className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      <PinIcon className="h-4 w-4" /> Add a place
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

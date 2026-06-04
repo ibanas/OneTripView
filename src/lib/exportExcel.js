@@ -14,6 +14,7 @@ export function exportToExcel(bookings, resolver) {
     Category: b.type === 'place' ? CATEGORY_LABELS[b.category] || b.category : '',
     Title: b.title,
     Location: b.location,
+    Address: b.address || '',
     'Start Date': b.startDate,
     'Start Time': b.startTime || '',
     'End Date': b.endDate || '',
@@ -30,6 +31,7 @@ export function exportToExcel(bookings, resolver) {
       'Category',
       'Title',
       'Location',
+      'Address',
       'Start Date',
       'Start Time',
       'End Date',
@@ -45,7 +47,8 @@ export function exportToExcel(bookings, resolver) {
     { wch: 8 }, // Type
     { wch: 12 }, // Category
     { wch: 26 }, // Title
-    { wch: 28 }, // Location
+    { wch: 20 }, // Location
+    { wch: 36 }, // Address
     { wch: 12 }, // Start Date
     { wch: 10 }, // Start Time
     { wch: 12 }, // End Date

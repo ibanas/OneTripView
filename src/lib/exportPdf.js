@@ -96,7 +96,7 @@ export function exportToPdf(bookings, resolver) {
         .join(' ');
       const details = [
         b.title,
-        b.location,
+        b.address || b.location,
         b.confirmationNumber ? `Conf: ${b.confirmationNumber}` : '',
         b.url || '',
         b.notes || '',
@@ -163,7 +163,7 @@ export function exportToPdf(bookings, resolver) {
         head: [['Category', 'Place', 'Link']],
         body: g.items.map((p) => [
           CATEGORY_LABELS[p.category] || p.category,
-          [p.title, p.notes || ''].filter(Boolean).join('\n'),
+          [p.title, p.address || '', p.notes || ''].filter(Boolean).join('\n'),
           p.url || '',
         ]),
         theme: 'striped',

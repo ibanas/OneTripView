@@ -165,6 +165,19 @@ export default function BookingCard({ booking, resolver, onChange, onDelete }) {
                   inputClassName="text-sm"
                 />
               </div>
+
+              {isPlace && (
+                <div className="mt-0.5 pl-[1.125rem] text-xs text-slate-400">
+                  <InlineField
+                    value={booking.address}
+                    onSave={(v) => set({ address: v || null })}
+                    placeholder="Add address"
+                    ariaLabel="Address"
+                    className="block w-full"
+                    inputClassName="text-xs"
+                  />
+                </div>
+              )}
             </div>
 
             <button
