@@ -118,5 +118,8 @@ export async function extractBookingsFromPdf(file) {
     raw.push(...part);
   }
 
-  return raw.map(normalizeBooking);
+  // Stamp a real creation time so freshly extracted bookings win merges over any
+  // untouched legacy data (which carries the epoch sentinel).
+  const now = new Date().toISOString();
+  return raw.map((b) => normalizeBooking({ ...b, updatedAt: now }));
 }

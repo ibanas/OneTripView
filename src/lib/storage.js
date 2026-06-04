@@ -3,6 +3,7 @@ import { DEFAULT_PEOPLE } from './people.js';
 
 const KEY = 'itinerary.bookings.v1';
 const PEOPLE_KEY = 'itinerary.people.v1';
+const PEOPLE_TS_KEY = 'itinerary.people_ts.v1';
 
 export function loadBookings() {
   try {
@@ -48,6 +49,23 @@ export function savePeople(people) {
     localStorage.setItem(PEOPLE_KEY, JSON.stringify(people));
   } catch {
     /* ignore quota */
+  }
+}
+
+// Timestamp of the last people-registry change (for cross-device merge).
+export function loadPeopleTs() {
+  try {
+    return localStorage.getItem(PEOPLE_TS_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function savePeopleTs(ts) {
+  try {
+    localStorage.setItem(PEOPLE_TS_KEY, ts);
+  } catch {
+    /* ignore */
   }
 }
 

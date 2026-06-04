@@ -183,6 +183,40 @@ export function MergeIcon({ className = 'w-4 h-4' }) {
   );
 }
 
+export function CloudIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M7 18a4 4 0 0 1-.5-7.97 5.5 5.5 0 0 1 10.6-1.02A4.25 4.25 0 0 1 17 18z" />
+    </svg>
+  );
+}
+
+export function CloudCheckIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M7 18a4 4 0 0 1-.5-7.97 5.5 5.5 0 0 1 10.6-1.02A4.25 4.25 0 0 1 17 18H7z" />
+      <path d="m9 14 2 2 4-4" />
+    </svg>
+  );
+}
+
+export function CheckIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="m5 12 5 5 9-11" />
+    </svg>
+  );
+}
+
+export function CopyIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+    </svg>
+  );
+}
+
 const TYPE_ICONS = {
   flight: PlaneIcon,
   hotel: BedIcon,

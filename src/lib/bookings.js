@@ -38,6 +38,12 @@ export function normalizeBooking(raw = {}) {
     travelers: dedupeNames(travelers),
     confirmationNumber: str(raw.confirmationNumber) || null,
     notes: str(raw.notes) || null,
+    // Sync metadata: updatedAt orders per-id merges; deleted is a tombstone so
+    // deletions propagate across devices (filtered out of the UI). Data that
+    // predates this field gets an epoch sentinel so any real edit/delete (which
+    // stamps a current time) always wins the merge — never the load time.
+    updatedAt: str(raw.updatedAt) || '1970-01-01T00:00:00.000Z',
+    deleted: raw.deleted === true,
   };
 }
 
@@ -48,6 +54,7 @@ export function emptyBooking() {
     location: '',
     startDate: '',
     travelers: [],
+    updatedAt: new Date().toISOString(), // a real creation time, not the epoch sentinel
   });
 }
 

@@ -138,12 +138,33 @@ against a Vercel preview, not just `npm run dev`.)
 > 10 s, which is too short for vision calls. Vercel's free tier (300 s
 > functions) is the smoothest fit.
 
-## Move a trip between devices
+## Sync across devices (optional)
+
+Click **Sync** in the header to keep your itinerary in sync across phone and
+laptop. How it works:
+
+- You **generate a private sync code** on one device and enter the same code on
+  the others.
+- Your data is **encrypted in the browser** with a key derived from that code
+  (PBKDF2 → AES-GCM). The server only ever stores ciphertext it cannot read,
+  addressed by a hash of the code. **Keep the code safe — it can't be recovered,
+  and anyone with it can read your trip.**
+- The app pulls on open / when you return to the tab, and pushes (debounced)
+  after changes. Bookings merge by id (newest edit wins; deletes propagate via
+  tombstones), so a stale device can't wipe newer data.
+
+**One-time setup (free):** in the Vercel dashboard → **Storage → Create
+Database → Upstash (Redis)** → choose **Free** and "let Vercel manage the
+account" → connect it to the project. This injects `KV_REST_API_URL` and
+`KV_REST_API_TOKEN`. **Redeploy**, and sync is live. (Free tier: 500K
+commands/month, 256 MB — far more than a personal trip needs.) For local-dev
+sync, run `vercel env pull .env.local`.
+
+### Or move a trip manually (no setup)
 
 Use **Export backup** / **Import backup** in the footer to download or restore a
-JSON file containing all bookings **and** your traveler-merge settings. Import is
-additive (it won't clobber existing data), so it works both for restoring on a
-fresh device and merging.
+JSON file of all bookings **and** your traveler-merge settings. Import is
+additive (it won't clobber existing data).
 
 ## Notes
 

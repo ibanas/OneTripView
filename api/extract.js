@@ -35,8 +35,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Vercel parses application/json bodies into req.body automatically.
-  const payload = typeof req.body === 'string' ? safeParse(req.body) : req.body;
+  // Vercel parses application/json bodies into req.body automatically; the
+  // getter can throw on malformed JSON, so guard it.
+  let payload = null;
+  try {
+    payload = typeof req.body === 'string' ? safeParse(req.body) : req.body;
+  } catch {
+    payload = null;
+  }
   const images = Array.isArray(payload?.images) ? payload.images : [];
   if (images.length === 0) {
     res.status(400).json({ error: 'No page images supplied.' });
