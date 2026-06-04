@@ -1,0 +1,35 @@
+Add multiple trips (travel journal) + global search
+
+Turn the single itinerary into separate trips, each owning its own bookings and
+places, with a Trips home and search across everything.
+
+- Model: every booking/place carries a tripId (added to normalizeBooking;
+  default DEFAULT_TRIP_ID = 'trip-default' so legacy data and synced records
+  converge on one migrated trip instead of forking).
+- trips.js: trip registry (newTrip/normalizeTrip), tripsWithDerived (per-trip
+  summarize -> card with dates/destination/counts/isPast), sortTrips
+  (Upcoming/Past), and reconcileTrips — an idempotent safety net that re-homes
+  any orphaned live booking into the (re)created default trip.
+- storage.js: trips + tripsTs persistence; activeTripId is per-device (not synced).
+- sync.js: v2 envelope { ...,(trips, tripsUpdatedAt) } with mergeTrips (per-id
+  newest-wins + tombstone GC, mirroring mergeBookings). v1 pulls upgrade safely.
+- App.jsx: active-trip scoping — summary/map/timeline/places/exports/hasContent
+  derive from activeBookings; CRUD stamps tripId = active trip; Trips-home render
+  gate with a back-chevron + trip name header; create/rename/delete trips
+  (delete tombstones the trip + its bookings); doFullSync merges + reconciles +
+  pushes trips.
+- TripsHome / TripCard / SearchResults / NewTripModal components; search.js
+  (global ranked search over name/destination/address/category/traveler/notes/
+  trip name, skips deleted trips). backup.js carries trips (v2).
+
+Review fixes (all confirmed findings — one root cause, orphaned bookings):
+reconcileTrips guarantees no live booking is ever stranded under a deleted/
+missing trip (concurrent delete-vs-add, GC'd tombstone, or a hand-edited/v1
+backup) — it re-homes them to the default trip and revives that trip when
+needed, idempotently, on load and on every sync.
+
+Verified: 30/30 logic tests (migration determinism, mergeTrips GC, per-trip
+scoping, sortTrips, search, reconcile orphan/revival/idempotency); build 261
+modules; dev boots clean.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>

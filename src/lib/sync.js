@@ -1,5 +1,8 @@
 // Cloud-sync orchestration: merge rules + encrypted pull/push transport.
-// The envelope shape is { v, updatedAt, bookings, people, peopleUpdatedAt }.
+// Envelope v2: { v, updatedAt, bookings, people, peopleUpdatedAt, trips, tripsUpdatedAt }.
+// A pulled v1 envelope simply has no `trips` (handled as []); bookings without a
+// tripId re-default to DEFAULT_TRIP_ID via normalizeBooking, so old/new clients
+// converge on one migrated trip rather than forking.
 
 import { encrypt, decrypt, bucketKeyFromCode } from './crypto.js';
 import {
@@ -51,6 +54,18 @@ export function mergeBookings(local = [], remote = []) {
   }
   const cutoff = new Date(Date.now() - TOMBSTONE_TTL_MS).toISOString();
   return [...byId.values()].filter((b) => !(b.deleted && (b.updatedAt || '') < cutoff));
+}
+
+/** Per-id newest-wins merge for trips (mirror of mergeBookings: tombstones + GC). */
+export function mergeTrips(local = [], remote = []) {
+  const byId = new Map();
+  for (const t of [...remote, ...local]) {
+    if (!t || !t.id) continue;
+    const prev = byId.get(t.id);
+    if (!prev || (t.updatedAt || '') >= (prev.updatedAt || '')) byId.set(t.id, t);
+  }
+  const cutoff = new Date(Date.now() - TOMBSTONE_TTL_MS).toISOString();
+  return [...byId.values()].filter((t) => !(t.deleted && (t.updatedAt || '') < cutoff));
 }
 
 /**

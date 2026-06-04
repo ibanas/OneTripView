@@ -129,6 +129,23 @@ export function AlertIcon({ className = 'w-5 h-5' }) {
   );
 }
 
+export function ChevronLeftIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <path d="m15 6-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function SearchIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} {...base}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
 export function ArrowRightIcon({ className = 'w-4 h-4' }) {
   return (
     <svg className={className} {...base}>

@@ -2,14 +2,16 @@
 // file, so it can be backed up or moved between devices without cloud sync.
 
 import { normalizeBooking } from './bookings.js';
+import { normalizeTrip } from './trips.js';
 
-export function exportBackup(bookings, people) {
+export function exportBackup(bookings, people, trips = []) {
   const data = {
     app: 'OneTripView',
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     bookings,
     people,
+    trips,
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -40,6 +42,9 @@ export async function readBackup(file) {
         .filter((p) => p && typeof p.id === 'string' && Array.isArray(p.aliases))
         .map((p) => ({ id: p.id, name: String(p.name || '').trim(), aliases: p.aliases.map(String) }))
     : [];
+  const trips = Array.isArray(data.trips)
+    ? data.trips.filter((t) => t && t.id).map(normalizeTrip)
+    : [];
 
-  return { bookings, people };
+  return { bookings, people, trips };
 }

@@ -5,6 +5,11 @@ import { cleanPlace } from './geocode.js';
 
 export const BOOKING_TYPES = ['flight', 'hotel', 'airbnb', 'place', 'other'];
 
+// Every booking/place belongs to a trip. Legacy data (and anything that arrives
+// without a tripId) defaults to this FIXED id so independent devices converge on
+// the same migrated trip instead of forking.
+export const DEFAULT_TRIP_ID = 'trip-default';
+
 export const TYPE_LABELS = {
   flight: 'Flight',
   hotel: 'Hotel',
@@ -41,6 +46,7 @@ export function normalizeBooking(raw = {}) {
 
   return {
     id: raw.id || newId(),
+    tripId: str(raw.tripId) || DEFAULT_TRIP_ID,
     type,
     title: str(raw.title) || 'Untitled booking',
     location: str(raw.location) || '',
