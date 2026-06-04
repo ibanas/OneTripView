@@ -44,7 +44,7 @@ export function parseGmapsUrl(rawUrl) {
     if (m) out.name = m[1].replace(/\+/g, ' ').trim();
     if (!out.name) {
       const q = u.searchParams.get('q') || u.searchParams.get('query');
-      if (q && !/^-?\d+\.\d+,/.test(q)) out.name = q.trim();
+      if (q && !/^-?\d+\.\d+,/.test(q)) out.name = q.split(',')[0].trim();
     }
     const at = rawUrl.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
     const bang = rawUrl.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);

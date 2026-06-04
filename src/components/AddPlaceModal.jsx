@@ -34,12 +34,15 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
   const titleEditedRef = useRef(false);
   const cityEditedRef = useRef(Boolean(presetCity));
   const addressEditedRef = useRef(false);
+  const enrichTimerRef = useRef(null);
+  const lastEnrichedRef = useRef('');
   useEffect(() => {
     titleRef.current = title;
     titleEditedRef.current = titleEdited;
     cityEditedRef.current = cityEdited;
     addressEditedRef.current = addressEdited;
   }, [title, titleEdited, cityEdited, addressEdited]);
+  useEffect(() => () => clearTimeout(enrichTimerRef.current), []);
 
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -53,29 +56,39 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
     return () => prev && prev.focus && prev.focus();
   }, []);
 
-  // Synchronous smart-fill as the link is typed/pasted.
-  const onLinkChange = (val) => {
-    setLink(val);
-    const d = detectLink(val);
-    if (!d.kind) return;
-    if (d.name && !titleEdited) setTitle(d.name);
-    if (d.category && d.category !== 'other') setCategory(d.category);
-    if (d.lat != null && d.lng != null) setCoords({ lat: d.lat, lng: d.lng });
-  };
-
-  // Best-effort enrichment when the link field loses focus.
-  const onLinkBlur = async () => {
-    if (!isHttpUrl(link)) return;
+  // Best-effort enrichment: resolve short links + fetch name/address/photo.
+  // Reads live edit-state from refs so it never overwrites what the user typed.
+  const runEnrich = async (url) => {
+    if (!isHttpUrl(url) || url === lastEnrichedRef.current) return;
+    lastEnrichedRef.current = url;
     setEnriching(true);
-    const r = await enrich(link);
+    const r = await enrich(url);
     setEnriching(false);
     if (!r) return;
-    // Read the LIVE edit state from refs, not the stale blur-time closure.
     if (r.name && !titleEditedRef.current && !titleRef.current) setTitle(r.name);
     if (r.address && !addressEditedRef.current) setAddress((a) => a || r.address);
     if (r.city && !cityEditedRef.current) setCity((c) => c || r.city);
     if (r.lat != null && r.lng != null) setCoords((c) => (c.lat == null ? { lat: r.lat, lng: r.lng } : c));
     if (r.image) setImage((img) => img || r.image);
+  };
+
+  // Synchronous smart-fill while typing + debounced enrichment so a pasted link
+  // auto-fills without needing to blur the field.
+  const onLinkChange = (val) => {
+    setLink(val);
+    const d = detectLink(val);
+    if (d.kind) {
+      if (d.name && !titleEditedRef.current) setTitle(d.name);
+      if (d.category && d.category !== 'other') setCategory(d.category);
+      if (d.lat != null && d.lng != null) setCoords({ lat: d.lat, lng: d.lng });
+    }
+    clearTimeout(enrichTimerRef.current);
+    if (isHttpUrl(val)) enrichTimerRef.current = setTimeout(() => runEnrich(val), 600);
+  };
+
+  const onLinkBlur = () => {
+    clearTimeout(enrichTimerRef.current);
+    runEnrich(link);
   };
 
   const canSave = title.trim() || link.trim();

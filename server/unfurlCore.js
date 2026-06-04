@@ -289,7 +289,7 @@ export function placeInfoFromJsonLd(objs) {
 }
 
 function parseGmaps(url) {
-  const out = { name: null, lat: null, lng: null };
+  const out = { name: null, lat: null, lng: null, address: null };
   try {
     const u = new URL(url);
     const path = decodeURIComponent(u.pathname);
@@ -302,10 +302,53 @@ function parseGmaps(url) {
       out.lat = parseFloat(coords[1]);
       out.lng = parseFloat(coords[2]);
     }
+    // Short links commonly resolve to /maps?q=Name, full address  (or q=lat,lng).
+    const q = u.searchParams.get('q') || u.searchParams.get('query');
+    if (q) {
+      const cm = q.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (cm) {
+        if (out.lat == null) {
+          out.lat = parseFloat(cm[1]);
+          out.lng = parseFloat(cm[2]);
+        }
+      } else {
+        const parts = q.split(',').map((s) => s.trim()).filter(Boolean);
+        if (!out.name && parts.length) out.name = parts[0];
+        if (parts.length > 1) out.address = parts.slice(1).join(', ');
+      }
+    }
   } catch {
     /* ignore */
   }
   return out;
+}
+
+// Forward-geocode a place/address string to coords via the FIXED Nominatim host.
+async function forwardGeocode(query) {
+  const q = String(query || '').trim();
+  if (!q) return null;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+      q
+    )}&format=jsonv2&limit=1&addressdetails=1`;
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'user-agent': 'OneTripView/1.0 (itinerary app)', accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const arr = await res.json();
+    const d = Array.isArray(arr) ? arr[0] : null;
+    if (!d) return null;
+    const a = d.address || {};
+    const city = a.city || a.town || a.village || a.municipality || a.suburb || null;
+    return { lat: parseFloat(d.lat), lng: parseFloat(d.lon), address: d.display_name || null, city };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 /** Resolve a URL into { kind, name?, lat?, lng?, image?, finalUrl } or null. */
@@ -321,8 +364,24 @@ export async function unfurl(targetUrl) {
 
   if (/google\.[a-z.]+\/maps|maps\.google\./i.test(finalUrl)) {
     const g = parseGmaps(finalUrl);
-    const { address, city } = await reverseGeocode(g.lat, g.lng);
-    return { kind: 'gmaps', name: g.name, lat: g.lat, lng: g.lng, address, city, finalUrl };
+    let { name, lat, lng, address } = g;
+    let city = null;
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      // Have a pin → fill the address from it if the URL didn't carry one.
+      const r = await reverseGeocode(lat, lng);
+      if (!address) address = r.address;
+      city = r.city;
+    } else if (address || name) {
+      // No pin in the URL (common for short links) → geocode the address/name.
+      const fg = await forwardGeocode(address || name);
+      if (fg) {
+        lat = fg.lat;
+        lng = fg.lng;
+        city = fg.city;
+        if (!address) address = fg.address;
+      }
+    }
+    return { kind: 'gmaps', name, lat, lng, address, city, finalUrl };
   }
 
   const ctype = res.headers.get('content-type') || '';
