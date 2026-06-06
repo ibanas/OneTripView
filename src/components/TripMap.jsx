@@ -350,7 +350,7 @@ export default function TripMap({ stops, places = [], onAddPlace }) {
       </div>
 
       {status === 'loading' && (
-        <div className="flex h-96 items-center justify-center gap-2 bg-slate-50 text-sm text-slate-500 sm:h-[32rem]">
+        <div className="flex h-[70vh] items-center justify-center gap-2 bg-slate-50 text-sm text-slate-500 sm:h-[34rem]">
           <Spinner className="h-5 w-5 text-sky-500" /> Locating your stops…
         </div>
       )}
@@ -368,7 +368,7 @@ export default function TripMap({ stops, places = [], onAddPlace }) {
             <PlaceAutocomplete onPick={handleMapPick} />
           </div>
         )}
-        <div ref={containerRef} className="h-96 w-full sm:h-[32rem]" />
+        <div ref={containerRef} className="h-[70vh] w-full sm:h-[34rem]" />
       </div>
     </section>
   );
