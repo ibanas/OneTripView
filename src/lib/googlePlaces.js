@@ -42,6 +42,18 @@ const TYPE_TO_CATEGORY = [
   ],
 ];
 
+/** Pull the best "city" from a Google place's address components. */
+export function localityFrom(components) {
+  const comps = Array.isArray(components) ? components : [];
+  const pick = (type) => comps.find((c) => (c.types || []).includes(type));
+  const c =
+    pick('locality') ||
+    pick('postal_town') ||
+    pick('administrative_area_level_2') ||
+    pick('administrative_area_level_1');
+  return c ? c.longText || c.long_name || '' : '';
+}
+
 /** Best-guess our category from a Google place's `types` array. */
 export function categoryFromTypes(types) {
   const set = new Set(Array.isArray(types) ? types : []);
@@ -89,6 +101,34 @@ export async function fetchPlaceDetails(placeId) {
     website: place.websiteURI || null,
     image,
     imageAttribution,
+  };
+}
+
+/**
+ * Resolve a free-text query (e.g. a place name + address from a pasted Google
+ * Maps link) to a precise Google place. Returns { title, address, city, lat,
+ * lng, category, placeId } or null. Pro tier (no photo) — used to turn pasted
+ * links into full places with an exact pin + placeId (which then unlocks the
+ * lazy rating/hours/photo). Throws if Places is unavailable.
+ */
+export async function findPlaceByText(query) {
+  if (!query) return null;
+  const { Place } = await loadPlaces();
+  const { places } = await Place.searchByText({
+    textQuery: query,
+    fields: ['location', 'formattedAddress', 'addressComponents', 'displayName', 'types'],
+    maxResultCount: 1,
+  });
+  const p = places && places[0];
+  if (!p || !p.location) return null;
+  return {
+    title: p.displayName || null,
+    address: p.formattedAddress || null,
+    city: localityFrom(p.addressComponents),
+    lat: p.location.lat(),
+    lng: p.location.lng(),
+    category: categoryFromTypes(p.types),
+    placeId: p.id || null,
   };
 }
 

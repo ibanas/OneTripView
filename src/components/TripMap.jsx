@@ -232,10 +232,22 @@ export default function TripMap({ stops, places = [] }) {
         let lat = p.lat;
         let lon = p.lng;
         if (lat == null || lon == null) {
-          const c = p.location ? await geocode(p.location) : null;
-          if (c) {
-            lat = c.lat;
-            lon = c.lon;
+          // No stored pin — geocode the most specific thing we have. The full
+          // address resolves precisely via Google; we then try name+city, name,
+          // and finally the city so a place still lands somewhere on the map.
+          const queries = [
+            p.address,
+            p.location && p.title ? `${p.title}, ${p.location}` : null,
+            p.title,
+            p.location,
+          ].filter(Boolean);
+          for (const q of queries) {
+            const c = await geocode(q);
+            if (c) {
+              lat = c.lat;
+              lon = c.lon;
+              break;
+            }
           }
         }
         if (lat != null && lon != null) {
@@ -310,7 +322,7 @@ export default function TripMap({ stops, places = [] }) {
       </div>
 
       {status === 'loading' && (
-        <div className="flex h-64 items-center justify-center gap-2 bg-slate-50 text-sm text-slate-500">
+        <div className="flex h-96 items-center justify-center gap-2 bg-slate-50 text-sm text-slate-500 sm:h-[32rem]">
           <Spinner className="h-5 w-5 text-sky-500" /> Locating your stops…
         </div>
       )}
@@ -324,7 +336,7 @@ export default function TripMap({ stops, places = [] }) {
 
       <div
         ref={containerRef}
-        className="h-72 w-full"
+        className="h-96 w-full sm:h-[32rem]"
         style={{ display: status === 'ready' ? 'block' : 'none' }}
       />
     </section>

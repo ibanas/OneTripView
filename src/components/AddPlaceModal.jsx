@@ -3,6 +3,7 @@ import { XIcon, PinIcon, CategoryIcon, Spinner } from './icons.jsx';
 import { PLACE_CATEGORIES, CATEGORY_LABELS } from '../lib/bookings.js';
 import { detectLink, enrich, isHttpUrl } from '../lib/places.js';
 import { placesAvailable } from '../lib/googleMaps.js';
+import { findPlaceByText } from '../lib/googlePlaces.js';
 import PlaceAutocomplete from './PlaceAutocomplete.jsx';
 
 /**
@@ -66,14 +67,34 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
     if (!isHttpUrl(url) || url === lastEnrichedRef.current) return;
     lastEnrichedRef.current = url;
     setEnriching(true);
-    const r = await enrich(url);
-    setEnriching(false);
-    if (!r) return;
+    const r = (await enrich(url)) || {};
     if (r.name && !titleEditedRef.current && !titleRef.current) setTitle(r.name);
     if (r.address && !addressEditedRef.current) setAddress((a) => a || r.address);
     if (r.city && !cityEditedRef.current) setCity((c) => c || r.city);
     if (r.lat != null && r.lng != null) setCoords((c) => (c.lat == null ? { lat: r.lat, lng: r.lng } : c));
     if (r.image) setImage((img) => img || r.image);
+
+    // Pasted links usually resolve to a name + address but NO exact pin, and the
+    // free geocoder can't place messy POI addresses (so neither the pin nor the
+    // city fill in). When a Google key is present, resolve the place through
+    // Google Places — exact coords + city + placeId (which also unlocks the lazy
+    // rating/hours/photo). Skip if the user changed the link meanwhile.
+    if (placesAvailable() && (r.lat == null || r.lng == null) && (r.name || r.address)) {
+      const query = [r.name, r.city || r.address].filter(Boolean).join(', ');
+      try {
+        const g = await findPlaceByText(query);
+        if (g && url === lastEnrichedRef.current) {
+          if (g.title && !titleEditedRef.current && !titleRef.current) setTitle(g.title);
+          if (g.address && !addressEditedRef.current) setAddress((a) => a || g.address);
+          if (g.city && !cityEditedRef.current) setCity((c) => c || g.city);
+          if (g.lat != null && g.lng != null) setCoords((c) => (c.lat == null ? { lat: g.lat, lng: g.lng } : c));
+          if (g.placeId) setPlaceId((pid) => pid || g.placeId);
+        }
+      } catch {
+        /* keep whatever the server enrich gave us */
+      }
+    }
+    setEnriching(false);
   };
 
   // Synchronous smart-fill while typing + debounced enrichment so a pasted link

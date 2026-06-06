@@ -1,18 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { loadPlaces, placesAvailable } from '../lib/googleMaps.js';
-import { categoryFromTypes } from '../lib/googlePlaces.js';
-
-// Pull the best "city" from a Google place's address components.
-function localityFrom(components) {
-  const comps = Array.isArray(components) ? components : [];
-  const pick = (type) => comps.find((c) => (c.types || []).includes(type));
-  const c =
-    pick('locality') ||
-    pick('postal_town') ||
-    pick('administrative_area_level_2') ||
-    pick('administrative_area_level_1');
-  return c ? c.longText || c.long_name || '' : '';
-}
+import { categoryFromTypes, localityFrom } from '../lib/googlePlaces.js';
 
 /**
  * Google Places "search-and-pick" box. Renders Google's current
