@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { geocode, cleanPlace } from '../lib/geocode.js';
 import { typeStyle, categoryHex } from '../lib/typeStyles.js';
+import { googleMapsKey, loadGoogleMaps } from '../lib/googleMaps.js';
 import { Spinner, MapIcon } from './icons.jsx';
 
 const esc = (s) =>
@@ -11,7 +12,7 @@ const esc = (s) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
   );
 
-// Numbered teardrop for route stops (flights/stays).
+// ---- Leaflet (OpenStreetMap) fallback ----
 function pinIcon(type, label) {
   const color = typeStyle(type).hex;
   return L.divIcon({
@@ -28,8 +29,6 @@ function pinIcon(type, label) {
     popupAnchor: [0, -22],
   });
 }
-
-// Small round dot for places — visually distinct from route teardrops.
 function placeIcon(category) {
   const color = categoryHex(category);
   return L.divIcon({
@@ -40,6 +39,156 @@ function placeIcon(category) {
     iconAnchor: [8, 8],
     popupAnchor: [0, -8],
   });
+}
+
+function buildLeafletMap(container, data) {
+  const map = L.map(container, { scrollWheelZoom: false, attributionControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 18,
+  }).addTo(map);
+
+  const seen = new Set();
+  let n = 0;
+  for (const p of data.route) {
+    const k = `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    n += 1;
+    L.marker([p.lat, p.lon], { icon: pinIcon(p.type, String(n)) })
+      .addTo(map)
+      .bindPopup(`<b>${n}. ${esc(p.name)}</b>`);
+  }
+  for (const p of data.places) {
+    const addr = p.address ? `<br><span style="color:#64748b">${esc(p.address)}</span>` : '';
+    const link = p.url
+      ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">Open</a>`
+      : '';
+    L.marker([p.lat, p.lon], { icon: placeIcon(p.category) })
+      .addTo(map)
+      .bindPopup(`<b>${esc(p.name)}</b>${addr}${link}`);
+  }
+
+  const routeLatLngs = data.route.map((p) => [p.lat, p.lon]);
+  const allLatLngs = [...routeLatLngs, ...data.places.map((p) => [p.lat, p.lon])];
+  if (routeLatLngs.length > 1) {
+    L.polyline(routeLatLngs, { color: '#2563eb', weight: 3, opacity: 0.7, dashArray: '6 8' }).addTo(map);
+  }
+  if (allLatLngs.length > 1) map.fitBounds(L.latLngBounds(allLatLngs), { padding: [36, 36] });
+  else map.setView(allLatLngs[0], 12);
+
+  const t = setTimeout(() => map.invalidateSize(), 60);
+  return () => {
+    clearTimeout(t);
+    map.remove();
+  };
+}
+
+// ---- Google Maps ----
+function buildGoogleMap(google, container, data) {
+  const gm = google.maps;
+  const map = new gm.Map(container, {
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    clickableIcons: false,
+    gestureHandling: 'cooperative',
+  });
+  const bounds = new gm.LatLngBounds();
+  const info = new gm.InfoWindow();
+  const markers = [];
+
+  const seen = new Set();
+  let n = 0;
+  for (const p of data.route) {
+    const k = `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    n += 1;
+    const pos = { lat: p.lat, lng: p.lon };
+    const mk = new gm.Marker({
+      position: pos,
+      map,
+      title: p.name,
+      label: { text: String(n), color: '#fff', fontSize: '11px', fontWeight: '600' },
+      icon: {
+        path: gm.SymbolPath.CIRCLE,
+        scale: 11,
+        fillColor: typeStyle(p.type).hex,
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      },
+    });
+    const label = `${n}. ${p.name}`;
+    mk.addListener('click', () => {
+      info.setContent(`<b>${esc(label)}</b>`);
+      info.open(map, mk);
+    });
+    markers.push(mk);
+    bounds.extend(pos);
+  }
+
+  for (const p of data.places) {
+    const pos = { lat: p.lat, lng: p.lon };
+    const mk = new gm.Marker({
+      position: pos,
+      map,
+      title: p.name,
+      icon: {
+        path: gm.SymbolPath.CIRCLE,
+        scale: 6,
+        fillColor: categoryHex(p.category),
+        fillOpacity: 1,
+        strokeColor: '#fff',
+        strokeWeight: 2,
+      },
+    });
+    const addr = p.address ? `<br><span style="color:#64748b">${esc(p.address)}</span>` : '';
+    const link = p.url
+      ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">Open</a>`
+      : '';
+    mk.addListener('click', () => {
+      info.setContent(`<b>${esc(p.name)}</b>${addr}${link}`);
+      info.open(map, mk);
+    });
+    markers.push(mk);
+    bounds.extend(pos);
+  }
+
+  const routeLatLngs = data.route.map((p) => ({ lat: p.lat, lng: p.lon }));
+  if (routeLatLngs.length > 1) {
+    new gm.Polyline({
+      path: routeLatLngs,
+      map,
+      strokeColor: '#2563eb',
+      strokeOpacity: 0, // dashed via repeated icons
+      icons: [
+        {
+          icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, strokeWeight: 3, scale: 2 },
+          offset: '0',
+          repeat: '14px',
+        },
+      ],
+    });
+  }
+
+  const count = data.route.length + data.places.length;
+  if (count > 1) map.fitBounds(bounds, 36);
+  else if (count === 1) {
+    map.setCenter(bounds.getCenter());
+    map.setZoom(13);
+  }
+
+  return () => {
+    markers.forEach((m) => m.setMap(null));
+    info.close();
+    try {
+      container.innerHTML = '';
+    } catch {
+      /* ignore */
+    }
+  };
 }
 
 export default function TripMap({ stops, places = [] }) {
@@ -61,9 +210,8 @@ export default function TripMap({ stops, places = [] }) {
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [data, setData] = useState({ route: [], places: [] });
   const containerRef = useRef(null);
-  const mapRef = useRef(null);
 
-  // 1) Geocode route stops (ordered) + places (use exact coords when present).
+  // 1) Geocode route stops + places (cached; exact coords skip the network).
   useEffect(() => {
     let alive = true;
     setStatus('loading');
@@ -109,59 +257,31 @@ export default function TripMap({ stops, places = [] }) {
     };
   }, [stopsKey, placesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 2) Build / rebuild the Leaflet map once points are resolved.
+  // 2) Build the map: Google Maps when a key is set, else the OSM fallback.
   useEffect(() => {
-    if (status !== 'ready' || !containerRef.current) return;
+    if (status !== 'ready' || !containerRef.current) return undefined;
+    const container = containerRef.current;
+    let cleanup = () => {};
+    let cancelled = false;
 
-    const map = L.map(containerRef.current, { scrollWheelZoom: false, attributionControl: true });
-    mapRef.current = map;
+    (async () => {
+      if (googleMapsKey()) {
+        try {
+          const google = await loadGoogleMaps();
+          if (cancelled || !container.isConnected) return;
+          cleanup = buildGoogleMap(google, container, data);
+          return;
+        } catch {
+          /* SDK failed to load — fall back to OSM */
+        }
+      }
+      if (cancelled || !container.isConnected) return;
+      cleanup = buildLeafletMap(container, data);
+    })();
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap',
-      maxZoom: 18,
-    }).addTo(map);
-
-    // Route markers (numbered), deduped by coordinate.
-    const seen = new Set();
-    let n = 0;
-    for (const p of data.route) {
-      const k = `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      n += 1;
-      L.marker([p.lat, p.lon], { icon: pinIcon(p.type, String(n)) })
-        .addTo(map)
-        .bindPopup(`<b>${n}. ${esc(p.name)}</b>`);
-    }
-
-    // Place markers (round, category-colored).
-    for (const p of data.places) {
-      const addr = p.address ? `<br><span style="color:#64748b">${esc(p.address)}</span>` : '';
-      const link = p.url
-        ? `<br><a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer">Open</a>`
-        : '';
-      L.marker([p.lat, p.lon], { icon: placeIcon(p.category) })
-        .addTo(map)
-        .bindPopup(`<b>${esc(p.name)}</b>${addr}${link}`);
-    }
-
-    const routeLatLngs = data.route.map((p) => [p.lat, p.lon]);
-    const allLatLngs = [...routeLatLngs, ...data.places.map((p) => [p.lat, p.lon])];
-    // Draw the journey line through route stops only (not places).
-    if (routeLatLngs.length > 1) {
-      L.polyline(routeLatLngs, { color: '#2563eb', weight: 3, opacity: 0.7, dashArray: '6 8' }).addTo(map);
-    }
-    if (allLatLngs.length > 1) {
-      map.fitBounds(L.latLngBounds(allLatLngs), { padding: [36, 36] });
-    } else {
-      map.setView(allLatLngs[0], 12);
-    }
-
-    const t = setTimeout(() => map.invalidateSize(), 60);
     return () => {
-      clearTimeout(t);
-      map.remove();
-      mapRef.current = null;
+      cancelled = true;
+      cleanup();
     };
   }, [status, data]);
 

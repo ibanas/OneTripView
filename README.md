@@ -103,15 +103,36 @@ an **interactive trip map**, a **vertical day-by-day timeline**, colored
 **keyless, browser-callable** services and **all degrade gracefully offline**
 (the core app never depends on the network):
 
-- **Map tiles** — OpenStreetMap (`tile.openstreetmap.org`) via Leaflet.
+- **Map tiles** — OpenStreetMap (`tile.openstreetmap.org`) via Leaflet by
+  default, or **Google Maps** when a key is configured (see below).
 - **Geocoding** (city → coordinates) — Open-Meteo Geocoding API, with a
-  Nominatim fallback. Results are cached in `localStorage`.
+  Nominatim fallback. Results are cached in `localStorage`. (Used for both map
+  providers, so switching to Google Maps does **not** require the paid Geocoding
+  API.)
 - **Destination photos** — Wikipedia REST "page summary" lead images, cached in
   `localStorage`, with a deterministic gradient fallback when a city has no
   photo or you're offline.
 
 If you're offline, the map shows a friendly notice and photos fall back to
 gradients — extraction, editing, filtering, and export all keep working.
+
+### Use Google Maps for the trip map (optional)
+
+The trip map uses free OpenStreetMap by default. To use **Google Maps** instead:
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create a project,
+   enable the **Maps JavaScript API**, and **enable billing** (Google Maps is a
+   paid product with a recurring monthly free credit).
+2. Create an **API key** and **restrict it**: Application restriction →
+   *HTTP referrers* → add your site (e.g. `https://onetripview.vercel.app/*`) and
+   `http://localhost:5173/*`; API restriction → *Maps JavaScript API* only.
+3. Set `VITE_GOOGLE_MAPS_API_KEY` — in `.env` for local dev and in the Vercel
+   project's Environment Variables — then **rebuild/redeploy**.
+
+The key is a **client** key (the Maps SDK runs in the browser, so it ships in the
+bundle — the `VITE_` prefix is intentional); the referrer restriction is what
+protects it. If the key is missing or fails to load, the map automatically falls
+back to OpenStreetMap, so the app never breaks.
 
 ## Use it on your phone — deploy to Vercel
 
