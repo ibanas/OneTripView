@@ -82,12 +82,15 @@ Then open the URL Vite prints (usually http://localhost:5173).
   bundled name groups merge automatically.
 - **Add a booking manually** with the **Add** button.
 - **Add places to check** with the **Place** button (or "+ add a spot" per city):
-  paste a Google Maps share link, a restaurant website, or an event page. Full
-  Maps links auto-fill the name + drop an exact map pin; other links get a name
-  you can edit. Places form a **"Places to check in {city}" shortlist** and show
-  as **category-colored map pins** — give one a date to also pin it onto the day
-  timeline. (A server-side "unfurl" enhancement resolves short `maps.app.goo.gl`
-  links and grabs a page photo; it fails silently so adding always works.)
+  **search Google and pick a result** (when a Maps key is configured) to auto-fill
+  the name, address, exact pin, category, and link — or paste a Google Maps share
+  link / restaurant website / event page. Places form a **"Places to check in
+  {city}" shortlist** and show as **category-colored map pins** — give one a date
+  to also pin it onto the day timeline. Each place card has a **"Load ratings,
+  hours & photo from Google"** button (with a key) that fetches those once and
+  caches them. (A server-side "unfurl" enhancement resolves short
+  `maps.app.goo.gl` links and grabs a page photo; it fails silently so adding
+  always works.)
 - **Delete** a booking with the trash icon on its card.
 - **Export** to Excel (one row per booking, travelers comma-separated, using the
   merged names) or to a printable, day-grouped PDF.
@@ -106,33 +109,51 @@ an **interactive trip map**, a **vertical day-by-day timeline**, colored
 - **Map tiles** — OpenStreetMap (`tile.openstreetmap.org`) via Leaflet by
   default, or **Google Maps** when a key is configured (see below).
 - **Geocoding** (city → coordinates) — Open-Meteo Geocoding API, with a
-  Nominatim fallback. Results are cached in `localStorage`. (Used for both map
-  providers, so switching to Google Maps does **not** require the paid Geocoding
-  API.)
-- **Destination photos** — Wikipedia REST "page summary" lead images, cached in
-  `localStorage`, with a deterministic gradient fallback when a city has no
-  photo or you're offline.
+  Nominatim fallback (or the **Google Geocoder** when a key is configured).
+  Results are cached in `localStorage`.
+- **Destination photos** — Wikipedia REST "page summary" lead images (or
+  **Google Places photos** when a key is configured), cached in `localStorage`,
+  with a deterministic gradient fallback when a city has no photo or you're
+  offline.
+- **Add a place** — paste a Google Maps / website link, or, when a key is
+  configured, **search Google directly** and pick a result (see below).
 
 If you're offline, the map shows a friendly notice and photos fall back to
 gradients — extraction, editing, filtering, and export all keep working.
 
-### Use Google Maps for the trip map (optional)
+### Use Google Maps for everything (optional)
 
-The trip map uses free OpenStreetMap by default. To use **Google Maps** instead:
+By default the app uses free, keyless services. Add a Google key to power the
+**whole** location experience with Google: the trip map, a **"search & add a
+place"** box (type a name, pick a result — it auto-fills the name, address, exact
+pin, category, and Maps link), **place ratings / opening hours / website /
+photos**, **geocoding**, and the **destination hero photos**.
 
-1. In [Google Cloud Console](https://console.cloud.google.com), create a project,
-   enable the **Maps JavaScript API**, and **enable billing** (Google Maps is a
-   paid product with a recurring monthly free credit).
-2. Create an **API key** and **restrict it**: Application restriction →
-   *HTTP referrers* → add your site (e.g. `https://onetripview.vercel.app/*`) and
-   `http://localhost:5173/*`; API restriction → *Maps JavaScript API* only.
+1. In [Google Cloud Console](https://console.cloud.google.com), create a project
+   and **enable billing** (Google Maps is paid, with per-API monthly free
+   allowances). On one **API key**, enable these three APIs:
+   - **Maps JavaScript API** — the map itself.
+   - **Places API (New)** — search/add, place details, photos. ⚠️ Pick the entry
+     labelled *"(New)"*; the legacy "Places API" will not work with this app.
+   - **Geocoding API** — turning place names into coordinates (recommended; if
+     you skip it, geocoding silently falls back to free Open-Meteo).
+2. **Restrict the key**: Application restriction → *HTTP referrers* → add your
+   site (e.g. `https://onetripview.vercel.app/*`) and `http://localhost:5173/*`;
+   API restriction → the three APIs above.
 3. Set `VITE_GOOGLE_MAPS_API_KEY` — in `.env` for local dev and in the Vercel
    project's Environment Variables — then **rebuild/redeploy**.
 
-The key is a **client** key (the Maps SDK runs in the browser, so it ships in the
-bundle — the `VITE_` prefix is intentional); the referrer restriction is what
-protects it. If the key is missing or fails to load, the map automatically falls
-back to OpenStreetMap, so the app never breaks.
+The key is a **client** key (the SDK runs in the browser, so it ships in the
+bundle — the `VITE_` prefix is intentional); the referrer + API restriction is
+what protects it. If the key is missing or fails to load, every feature falls
+back to its free service, so the app never breaks.
+
+**Cost control.** Google bills at the highest field tier a call touches.
+Adding/searching stays on the cheaper *Essentials/Pro* tiers; the richer
+*Enterprise* fields (ratings, hours, website, photos) are fetched **once per
+place, on demand** (a "Load ratings, hours & photo from Google" button on each
+place card), then **cached and synced** so re-opens and your other devices never
+re-bill. Google place photos are shown **with the required attribution**.
 
 ## Use it on your phone — deploy to Vercel
 

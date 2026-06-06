@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { XIcon, PinIcon, CategoryIcon, Spinner } from './icons.jsx';
 import { PLACE_CATEGORIES, CATEGORY_LABELS } from '../lib/bookings.js';
 import { detectLink, enrich, isHttpUrl } from '../lib/places.js';
+import { placesAvailable } from '../lib/googleMaps.js';
+import PlaceAutocomplete from './PlaceAutocomplete.jsx';
 
 /**
  * Add a "place to check". Pasting a link smart-fills name/category/coords
@@ -26,7 +28,9 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
   const [notes, setNotes] = useState('');
   const [coords, setCoords] = useState({ lat: null, lng: null });
   const [image, setImage] = useState(null);
+  const [placeId, setPlaceId] = useState(null);
   const [enriching, setEnriching] = useState(false);
+  const useGoogle = placesAvailable();
 
   const panelRef = useRef(null);
   // Live refs so a user edit DURING an in-flight enrich() always wins the race.
@@ -91,6 +95,27 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
     runEnrich(link);
   };
 
+  // A pick from the Google search box fills everything at once. Mark fields as
+  // user-edited so a later paste-enrich can't clobber the picked values. The
+  // photo + rating/hours stay unfetched here (Enterprise) — loaded later on the
+  // place card, then persisted, so adding stays on the cheap tier.
+  const onPick = (p) => {
+    setTitle(p.title || '');
+    setTitleEdited(true);
+    if (p.category) setCategory(p.category);
+    if (p.city) {
+      setCity(p.city);
+      setCityEdited(true);
+    }
+    if (p.address) {
+      setAddress(p.address);
+      setAddressEdited(true);
+    }
+    if (p.lat != null && p.lng != null) setCoords({ lat: p.lat, lng: p.lng });
+    setPlaceId(p.placeId || null);
+    if (p.url) setLink(p.url);
+  };
+
   const canSave = title.trim() || link.trim();
 
   const submit = (e) => {
@@ -106,6 +131,7 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
       lat: coords.lat,
       lng: coords.lng,
       image,
+      placeId,
       startDate: date,
       startTime: date ? time : '',
       notes: notes.trim() || null,
@@ -147,6 +173,23 @@ export default function AddPlaceModal({ onAdd, onClose, presetCity = '', cities 
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {/* Google search (primary, when a Maps key is configured) */}
+          {useGoogle && (
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">
+                Search Google for a place
+              </label>
+              <PlaceAutocomplete onPick={onPick} />
+              <p className="mt-1 text-xs text-slate-400">
+                Pick a result to auto-fill the name, address, and exact map pin.
+              </p>
+              <div className="mt-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-300">
+                <span className="h-px flex-1 bg-slate-100" /> or paste a link{' '}
+                <span className="h-px flex-1 bg-slate-100" />
+              </div>
+            </div>
+          )}
+
           {/* Link */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400">

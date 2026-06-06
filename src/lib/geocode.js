@@ -1,7 +1,10 @@
-// Keyless, browser-callable geocoding via the Open-Meteo Geocoding API
-// (CORS-enabled, no key). Results are cached in localStorage so repeated map
-// renders are offline and we stay well under rate limits. Falls back to
-// Nominatim, then gives up gracefully (caller hides the map / shows a notice).
+// Geocoding (place string -> coordinates). When a Google Maps key is configured
+// we use the Google Geocoder (client-side, under the same key); otherwise we use
+// the keyless Open-Meteo API with a Nominatim fallback. Results are cached in
+// localStorage so repeated map renders are offline and we stay under rate limits.
+// On total failure we give up gracefully (caller hides the map / shows a notice).
+
+import { googleMapsKey, loadGeocoding } from './googleMaps.js';
 
 const CACHE_PREFIX = 'itinerary.geo.v1:';
 
@@ -27,6 +30,67 @@ function cacheSet(key, value) {
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(value));
   } catch {
     /* ignore quota */
+  }
+}
+
+// Memoized Google Geocoder (only created once a key is present + the lib loads).
+let geocoderPromise = null;
+function getGoogleGeocoder() {
+  if (!geocoderPromise) {
+    geocoderPromise = loadGeocoding()
+      .then(({ Geocoder }) => new Geocoder())
+      .catch((err) => {
+        geocoderPromise = null; // allow a later retry
+        throw err;
+      });
+  }
+  return geocoderPromise;
+}
+
+// Pull the best "city" name out of a Google result's address components.
+function localityFrom(result) {
+  const comps = result.address_components || [];
+  const pick = (type) => comps.find((c) => (c.types || []).includes(type))?.long_name;
+  return (
+    pick('locality') ||
+    pick('postal_town') ||
+    pick('administrative_area_level_2') ||
+    pick('administrative_area_level_1') ||
+    result.formatted_address ||
+    null
+  );
+}
+
+async function fromGoogle(q) {
+  if (!googleMapsKey()) return null;
+  const geocoder = await getGoogleGeocoder();
+  let results;
+  try {
+    ({ results } = await geocoder.geocode({ address: q }));
+  } catch {
+    return null; // ZERO_RESULTS / OVER_QUERY_LIMIT etc. — fall through to OSM
+  }
+  const r = results && results[0];
+  if (!r) return null;
+  const loc = r.geometry.location;
+  const country = (r.address_components || []).find((c) => (c.types || []).includes('country'));
+  return {
+    lat: loc.lat(),
+    lon: loc.lng(),
+    name: localityFrom(r) || q,
+    country: country?.long_name || null,
+  };
+}
+
+/** Reverse-geocode coords to a formatted address (Google only; null otherwise). */
+export async function reverseGeocode(lat, lng) {
+  if (!googleMapsKey() || lat == null || lng == null) return null;
+  try {
+    const geocoder = await getGoogleGeocoder();
+    const { results } = await geocoder.geocode({ location: { lat, lng } });
+    return results && results[0] ? results[0].formatted_address || null : null;
+  } catch {
+    return null;
   }
 }
 
@@ -71,14 +135,25 @@ export async function geocode(rawPlace) {
   const cached = cacheGet(key);
   if (cached !== undefined) return cached;
 
+  // Google first (when a key is set), then the keyless services. A Google miss
+  // (null) still falls through to Open-Meteo/Nominatim so coverage never drops.
   let coords = null;
-  try {
-    coords = await fromOpenMeteo(q);
-  } catch {
+  if (googleMapsKey()) {
     try {
-      coords = await fromNominatim(q);
+      coords = await fromGoogle(q);
     } catch {
-      return null; // offline / both failed — don't cache, allow retry later
+      /* fall through to the keyless services */
+    }
+  }
+  if (!coords) {
+    try {
+      coords = await fromOpenMeteo(q);
+    } catch {
+      try {
+        coords = await fromNominatim(q);
+      } catch {
+        return null; // offline / all failed — don't cache, allow retry later
+      }
     }
   }
 

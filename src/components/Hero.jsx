@@ -140,6 +140,13 @@ export default function Hero({
           </div>
         )}
       </div>
+
+      {/* Required attribution for Google place photos */}
+      {showPhoto && img?.attribution && (
+        <p className="absolute bottom-1.5 right-2.5 z-10 text-[10px] text-white/60 drop-shadow-sm">
+          Photo: {img.attribution}
+        </p>
+      )}
     </section>
   );
 }

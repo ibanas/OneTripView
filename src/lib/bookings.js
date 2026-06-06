@@ -62,8 +62,18 @@ export function normalizeBooking(raw = {}) {
     category: PLACE_CATEGORIES.includes(raw.category) ? raw.category : 'other',
     lat: numOrNull(raw.lat),
     lng: numOrNull(raw.lng),
-    image: str(raw.image) || null,
+    image: urlStr(raw.image),
     address: str(raw.address) || null,
+    // Google Places enrichment (populated lazily, then synced so it's fetched
+    // at most once per place across all devices).
+    placeId: str(raw.placeId) || null,
+    rating: numOrNull(raw.rating),
+    hours: strArrOrNull(raw.hours),
+    website: urlStr(raw.website),
+    imageAttribution: str(raw.imageAttribution) || null,
+    // Set once Google details have been fetched (even if empty) so we never
+    // re-bill the Enterprise tier for the same place.
+    detailsFetchedAt: str(raw.detailsFetchedAt) || null,
     // Sync metadata: updatedAt orders per-id merges; deleted is a tombstone so
     // deletions propagate across devices (filtered out of the UI). Data that
     // predates this field gets an epoch sentinel so any real edit/delete (which
@@ -128,6 +138,13 @@ function urlStr(v) {
 function numOrNull(v) {
   const n = typeof v === 'number' ? v : parseFloat(v);
   return Number.isFinite(n) ? n : null;
+}
+
+// Keep an array of non-empty strings (e.g. opening-hours lines), else null.
+function strArrOrNull(v) {
+  if (!Array.isArray(v)) return null;
+  const out = v.map((s) => str(s)).filter(Boolean);
+  return out.length ? out : null;
 }
 
 /** Case-insensitive de-dupe that preserves the first-seen spelling. */

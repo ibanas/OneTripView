@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import InlineField from './InlineField.jsx';
 import TravelerChips from './TravelerChips.jsx';
 import {
@@ -8,7 +8,9 @@ import {
   TrashIcon,
   PinIcon,
   ClockIcon,
+  Spinner,
 } from './icons.jsx';
+import { fetchPlaceDetails, placesAvailable } from '../lib/googlePlaces.js';
 import {
   BOOKING_TYPES,
   TYPE_LABELS,
@@ -23,29 +25,56 @@ import { mapsUrlFor, detectLink } from '../lib/places.js';
 import { formatDateLong } from '../lib/format.js';
 import { useCityImage, gradientFor } from '../lib/photos.js';
 
-// City photo thumbnail. `override` (e.g. an og:image) wins over the city photo;
-// both fall back to a deterministic gradient. Only mounted when there's a city
-// or an override, so we never fetch images for flight legs.
-function MediaThumb({ city, override }) {
+// City photo thumbnail. `override` (e.g. a place's own photo) wins over the city
+// photo; both fall back to a deterministic gradient. Only mounted when there's a
+// city or an override, so we never fetch images for flight legs. Google photos
+// carry a required attribution, shown as a caption.
+function MediaThumb({ city, override, overrideAttribution }) {
   const img = useCityImage(city || '');
   const [failed, setFailed] = useState(false);
-  const src = !failed ? override || img?.src : null;
+  const candidate = override || img?.src;
+  // Clear a stale error when the source changes, so a fresh valid photo (e.g.
+  // loaded on demand, or a new city via inline edit) isn't hidden by an old 404.
+  useEffect(() => setFailed(false), [candidate]);
+  const usingOverride = Boolean(override);
+  const src = !failed ? candidate : null;
+  const attribution = usingOverride ? overrideAttribution : img?.attribution;
   return (
-    <div
-      className="hidden h-20 w-28 shrink-0 overflow-hidden rounded-xl ring-1 ring-slate-100 sm:block"
-      style={{ background: gradientFor(city || 'place') }}
-      title={city || ''}
-    >
-      {src && (
-        <img
-          src={src}
-          alt={city || ''}
-          loading="lazy"
-          onError={() => setFailed(true)}
-          className="h-full w-full object-cover"
-        />
+    <div className="hidden shrink-0 sm:block">
+      <div
+        className="h-20 w-28 overflow-hidden rounded-xl ring-1 ring-slate-100"
+        style={{ background: gradientFor(city || 'place') }}
+        title={city || ''}
+      >
+        {src && (
+          <img
+            src={src}
+            alt={city || ''}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            className="h-full w-full object-cover"
+          />
+        )}
+      </div>
+      {src && attribution && (
+        <p className="mt-0.5 w-28 truncate text-[10px] text-slate-400" title={`Photo: ${attribution}`}>
+          Photo: {attribution}
+        </p>
       )}
     </div>
+  );
+}
+
+// Compact star rating (e.g. "★ 4.5 / 5").
+function Stars({ rating }) {
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <span className="text-amber-500" aria-hidden="true">
+        ★
+      </span>
+      <span className="font-semibold text-ink">{rating.toFixed(1)}</span>
+      <span className="text-xs text-slate-400">/ 5</span>
+    </span>
   );
 }
 
@@ -85,6 +114,38 @@ export default function BookingCard({ booking, resolver, onChange, onDelete }) {
 
   const set = (patch) => onChange({ ...booking, ...patch });
   const chips = isPlace ? [] : resolveTravelers(booking.travelers, resolver);
+
+  // Lazy, once-ever fetch of Google rating/hours/website/photo (Enterprise tier).
+  // Persists via onChange so it syncs to other devices and never re-bills.
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
+  const hasDetails = booking.rating != null || booking.hours || booking.website;
+  const canLoadDetails =
+    isPlace && !hasDetails && !booking.detailsFetchedAt && placesAvailable() && booking.placeId;
+
+  const loadDetails = async () => {
+    if (loadingDetails || !booking.placeId) return;
+    setLoadingDetails(true);
+    try {
+      const got = await fetchPlaceDetails(booking.placeId);
+      // If the card unmounted during the fetch (deleted / regrouped by a date or
+      // city edit), don't persist a stale snapshot — it would resurrect a deleted
+      // booking or revert the edit and sync that everywhere.
+      if (!mountedRef.current) return;
+      // Stamp detailsFetchedAt (so an empty result doesn't re-bill) and keep only
+      // the fields Google returned, so a null never wipes an existing value.
+      const patch = { detailsFetchedAt: new Date().toISOString() };
+      for (const [k, v] of Object.entries(got)) if (v != null) patch[k] = v;
+      set(patch);
+    } catch {
+      /* transient failure — leave unstamped so the user can retry */
+    } finally {
+      if (mountedRef.current) setLoadingDetails(false);
+    }
+  };
 
   const addTraveler = (name) => set({ travelers: dedupeNames([...booking.travelers, name]) });
   const removeChip = (chip) =>
@@ -294,11 +355,59 @@ export default function BookingCard({ booking, resolver, onChange, onDelete }) {
               />
             </div>
           </div>
+
+          {/* Google place details (lazy, persisted) */}
+          {isPlace && hasDetails && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-3 text-sm">
+              {booking.rating != null && <Stars rating={booking.rating} />}
+              {booking.website && (
+                <a
+                  href={booking.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-sky-600 hover:underline"
+                >
+                  <ExternalLinkIcon className="h-3.5 w-3.5" /> Website
+                </a>
+              )}
+              {booking.hours && (
+                <details className="w-full text-xs text-slate-500">
+                  <summary className="cursor-pointer select-none font-medium text-slate-600">
+                    Opening hours
+                  </summary>
+                  <ul className="mt-1 space-y-0.5 pl-1">
+                    {booking.hours.map((h, i) => (
+                      <li key={i}>{h}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+          {canLoadDetails && (
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={loadDetails}
+                disabled={loadingDetails}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50"
+              >
+                {loadingDetails && <Spinner className="h-3.5 w-3.5 text-sky-500" />}
+                {loadingDetails ? 'Loading…' : 'Load ratings, hours & photo from Google'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Photo */}
         {isPlace
-          ? (cityName || booking.image) && <MediaThumb city={cityName} override={booking.image} />
+          ? (cityName || booking.image) && (
+              <MediaThumb
+                city={cityName}
+                override={booking.image}
+                overrideAttribution={booking.imageAttribution}
+              />
+            )
           : isStay && cityName && <MediaThumb city={cityName} />}
       </div>
     </div>
