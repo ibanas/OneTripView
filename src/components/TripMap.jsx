@@ -3,7 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { geocode, cleanPlace } from '../lib/geocode.js';
 import { typeStyle, categoryHex } from '../lib/typeStyles.js';
-import { googleMapsKey, loadGoogleMaps } from '../lib/googleMaps.js';
+import { googleMapsKey, loadGoogleMaps, placesAvailable } from '../lib/googleMaps.js';
+import PlaceAutocomplete from './PlaceAutocomplete.jsx';
 import { Spinner, MapIcon } from './icons.jsx';
 
 const esc = (s) =>
@@ -85,15 +86,16 @@ function buildLeafletMap(container, data) {
 }
 
 // ---- Google Maps ----
-function buildGoogleMap(google, container, data) {
+function buildGoogleMap(google, container, data, mapRef) {
   const gm = google.maps;
   const map = new gm.Map(container, {
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
+    mapTypeControl: true, // satellite / map toggle
+    streetViewControl: true, // pegman
+    fullscreenControl: true,
     clickableIcons: false,
-    gestureHandling: 'cooperative',
+    gestureHandling: 'greedy', // one-finger / wheel pan now the map is large
   });
+  if (mapRef) mapRef.current = map;
   const bounds = new gm.LatLngBounds();
   const info = new gm.InfoWindow();
   const markers = [];
@@ -183,6 +185,7 @@ function buildGoogleMap(google, container, data) {
   return () => {
     markers.forEach((m) => m.setMap(null));
     info.close();
+    if (mapRef) mapRef.current = null;
     try {
       container.innerHTML = '';
     } catch {
@@ -191,7 +194,7 @@ function buildGoogleMap(google, container, data) {
   };
 }
 
-export default function TripMap({ stops, places = [] }) {
+export default function TripMap({ stops, places = [], onAddPlace }) {
   const stopsKey = useMemo(
     () => stops.map((s) => `${cleanPlace(s.place).toLowerCase()}|${s.type}`).join('>'),
     [stops]
@@ -210,6 +213,30 @@ export default function TripMap({ stops, places = [] }) {
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [data, setData] = useState({ route: [], places: [] });
   const containerRef = useRef(null);
+  const mapInstanceRef = useRef(null); // the Google map (null in OSM/Leaflet mode)
+
+  // A pick from the map's search box: add it as a place (exact pin + placeId), and
+  // pan the Google map to it. The new pin appears via the places prop update.
+  const handleMapPick = (p) => {
+    if (!p || p.lat == null || p.lng == null) return;
+    onAddPlace?.({
+      type: 'place',
+      title: p.title || 'Untitled place',
+      location: p.city || '',
+      address: p.address || null,
+      category: p.category || 'other',
+      url: p.url || null,
+      lat: p.lat,
+      lng: p.lng,
+      placeId: p.placeId || null,
+      updatedAt: new Date().toISOString(),
+    });
+    const m = mapInstanceRef.current;
+    if (m) {
+      m.panTo({ lat: p.lat, lng: p.lng });
+      m.setZoom(Math.max(m.getZoom() || 0, 15));
+    }
+  };
 
   // 1) Geocode route stops + places (cached; exact coords skip the network).
   useEffect(() => {
@@ -276,12 +303,13 @@ export default function TripMap({ stops, places = [] }) {
     let cleanup = () => {};
     let cancelled = false;
 
+    mapInstanceRef.current = null;
     (async () => {
       if (googleMapsKey()) {
         try {
           const google = await loadGoogleMaps();
           if (cancelled || !container.isConnected) return;
-          cleanup = buildGoogleMap(google, container, data);
+          cleanup = buildGoogleMap(google, container, data, mapInstanceRef);
           return;
         } catch (err) {
           // Don't fail silently — surface WHY we fell back so a misconfigured
@@ -334,11 +362,14 @@ export default function TripMap({ stops, places = [] }) {
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        className="h-96 w-full sm:h-[32rem]"
-        style={{ display: status === 'ready' ? 'block' : 'none' }}
-      />
+      <div className="relative" style={{ display: status === 'ready' ? 'block' : 'none' }}>
+        {onAddPlace && placesAvailable() && (
+          <div className="absolute left-1/2 top-3 z-[500] w-[min(22rem,calc(100%-6rem))] -translate-x-1/2 rounded-xl bg-white/95 p-1.5 shadow-lift ring-1 ring-slate-200 backdrop-blur">
+            <PlaceAutocomplete onPick={handleMapPick} />
+          </div>
+        )}
+        <div ref={containerRef} className="h-96 w-full sm:h-[32rem]" />
+      </div>
     </section>
   );
 }

@@ -385,6 +385,13 @@ export default function App() {
     setView('places'); // jump to the Places tab so the new place is visible
   };
 
+  // Add a place picked from the map's own search box — stays on the current view
+  // (the new pin just appears on the map).
+  const addPlaceFromMap = (raw) => {
+    setBookings((prev) => [...prev, normalizeBooking({ ...raw, tripId: activeTripId })]);
+    schedulePush();
+  };
+
   const applyPeople = (next) => {
     setPeople(next);
     setPeopleTs(nowIso());
@@ -619,7 +626,7 @@ export default function App() {
                 )}
 
                 {(stops.length > 0 || placePins.length > 0) && (
-                  <TripMap stops={stops} places={placePins} />
+                  <TripMap stops={stops} places={placePins} onAddPlace={addPlaceFromMap} />
                 )}
 
                 <DropZone onFiles={handleFiles} compact />
@@ -649,7 +656,9 @@ export default function App() {
               </>
             ) : (
               <>
-                {placePins.length > 0 && <TripMap stops={[]} places={placePins} />}
+                {placePins.length > 0 && (
+                  <TripMap stops={[]} places={placePins} onAddPlace={addPlaceFromMap} />
+                )}
                 {placePins.length > 0 ? (
                   <PlacesToCheck
                     places={placePins}

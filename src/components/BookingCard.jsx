@@ -10,7 +10,7 @@ import {
   ClockIcon,
   Spinner,
 } from './icons.jsx';
-import { fetchPlaceDetails, placesAvailable } from '../lib/googlePlaces.js';
+import { fetchPlaceDetails, findPlaceByText, placesAvailable } from '../lib/googlePlaces.js';
 import {
   BOOKING_TYPES,
   TYPE_LABELS,
@@ -29,7 +29,9 @@ import { useCityImage, gradientFor } from '../lib/photos.js';
 // photo; both fall back to a deterministic gradient. Only mounted when there's a
 // city or an override, so we never fetch images for flight legs. Google photos
 // carry a required attribution, shown as a caption.
-function MediaThumb({ city, override, overrideAttribution }) {
+function MediaThumb({ city, seed, override, overrideAttribution }) {
+  // `city` drives the city-photo fetch (stays). Pass city="" to skip it (places,
+  // where a city photo would be identical for every place in the same city).
   const img = useCityImage(city || '');
   const [failed, setFailed] = useState(false);
   const candidate = override || img?.src;
@@ -39,12 +41,15 @@ function MediaThumb({ city, override, overrideAttribution }) {
   const usingOverride = Boolean(override);
   const src = !failed ? candidate : null;
   const attribution = usingOverride ? overrideAttribution : img?.attribution;
+  // Gradient hue is seeded per-place (so pinless/photoless places look distinct,
+  // not all identical) — falling back to the city, then a constant.
+  const gradientSeed = seed || city || 'place';
   return (
     <div className="hidden shrink-0 sm:block">
       <div
         className="h-20 w-28 overflow-hidden rounded-xl ring-1 ring-slate-100"
-        style={{ background: gradientFor(city || 'place') }}
-        title={city || ''}
+        style={{ background: gradientFor(gradientSeed) }}
+        title={seed || city || ''}
       >
         {src && (
           <img
@@ -123,25 +128,55 @@ export default function BookingCard({ booking, resolver, onChange, onDelete }) {
     mountedRef.current = false;
   }, []);
   const hasDetails = booking.rating != null || booking.hours || booking.website;
-  const canLoadDetails =
-    isPlace && !hasDetails && !booking.detailsFetchedAt && placesAvailable() && booking.placeId;
+  const hasPin = booking.lat != null && booking.lng != null;
+  // Offer Google enrichment for any place we haven't enriched yet, as long as we
+  // have something to look it up by (a placeId, or a name/address to search).
+  const canEnrich =
+    isPlace &&
+    !booking.detailsFetchedAt &&
+    placesAvailable() &&
+    Boolean(booking.placeId || booking.title || booking.address);
 
-  const loadDetails = async () => {
-    if (loadingDetails || !booking.placeId) return;
+  // One action: if the place has no placeId yet (e.g. added by pasting a link),
+  // resolve it via Google text search (exact pin + city + placeId), then fetch
+  // its rating/hours/website/photo. Persists once via onChange (syncs; no re-bill).
+  const enrichFromGoogle = async () => {
+    if (loadingDetails) return;
     setLoadingDetails(true);
     try {
-      const got = await fetchPlaceDetails(booking.placeId);
-      // If the card unmounted during the fetch (deleted / regrouped by a date or
-      // city edit), don't persist a stale snapshot — it would resurrect a deleted
-      // booking or revert the edit and sync that everywhere.
+      let placeId = booking.placeId;
+      const patch = {};
+      if (!placeId) {
+        const q = [booking.title, booking.location || booking.address].filter(Boolean).join(', ');
+        const g = q ? await findPlaceByText(q) : null;
+        if (g) {
+          placeId = g.placeId;
+          if (g.lat != null && g.lng != null) {
+            patch.lat = g.lat;
+            patch.lng = g.lng;
+          }
+          if (g.city && !booking.location) patch.location = g.city;
+          if (g.address && !booking.address) patch.address = g.address;
+          if (g.placeId) patch.placeId = g.placeId;
+        }
+      }
+      let gotDetails = false;
+      if (placeId) {
+        try {
+          const d = await fetchPlaceDetails(placeId);
+          for (const [k, v] of Object.entries(d)) if (v != null) patch[k] = v;
+          gotDetails = true;
+        } catch {
+          /* keep any coords we found; leave unstamped so the photo can retry */
+        }
+      }
+      // Only mark "fetched" once details actually came back, so a transient photo
+      // failure stays retryable. Coords/placeId still persist either way.
+      if (gotDetails) patch.detailsFetchedAt = new Date().toISOString();
+      // If the card unmounted during the fetch (deleted / regrouped by an edit),
+      // don't persist a stale snapshot — it would resurrect/revert + sync it.
       if (!mountedRef.current) return;
-      // Stamp detailsFetchedAt (so an empty result doesn't re-bill) and keep only
-      // the fields Google returned, so a null never wipes an existing value.
-      const patch = { detailsFetchedAt: new Date().toISOString() };
-      for (const [k, v] of Object.entries(got)) if (v != null) patch[k] = v;
-      set(patch);
-    } catch {
-      /* transient failure — leave unstamped so the user can retry */
+      if (Object.keys(patch).length) set(patch);
     } finally {
       if (mountedRef.current) setLoadingDetails(false);
     }
@@ -384,31 +419,37 @@ export default function BookingCard({ booking, resolver, onChange, onDelete }) {
               )}
             </div>
           )}
-          {canLoadDetails && (
+          {canEnrich && (
             <div className="mt-3 border-t border-slate-100 pt-3">
               <button
                 type="button"
-                onClick={loadDetails}
+                onClick={enrichFromGoogle}
                 disabled={loadingDetails}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-50"
               >
                 {loadingDetails && <Spinner className="h-3.5 w-3.5 text-sky-500" />}
-                {loadingDetails ? 'Loading…' : 'Load ratings, hours & photo from Google'}
+                {loadingDetails
+                  ? 'Finding on Google…'
+                  : hasPin
+                    ? 'Load ratings, hours & photo from Google'
+                    : 'Find on Google — add pin, photo & details'}
               </button>
             </div>
           )}
         </div>
 
-        {/* Photo */}
-        {isPlace
-          ? (cityName || booking.image) && (
-              <MediaThumb
-                city={cityName}
-                override={booking.image}
-                overrideAttribution={booking.imageAttribution}
-              />
-            )
-          : isStay && cityName && <MediaThumb city={cityName} />}
+        {/* Photo: places use their own Google photo (or a per-place gradient — NOT
+            the city photo, which would be identical for every place in a city). */}
+        {isPlace ? (
+          <MediaThumb
+            city=""
+            seed={booking.title || cityName || 'place'}
+            override={booking.image}
+            overrideAttribution={booking.imageAttribution}
+          />
+        ) : (
+          isStay && cityName && <MediaThumb city={cityName} />
+        )}
       </div>
     </div>
   );
