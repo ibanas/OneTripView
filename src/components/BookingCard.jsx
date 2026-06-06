@@ -45,9 +45,9 @@ function MediaThumb({ city, seed, override, overrideAttribution }) {
   // not all identical) — falling back to the city, then a constant.
   const gradientSeed = seed || city || 'place';
   return (
-    <div className="hidden shrink-0 sm:block">
+    <div className="shrink-0">
       <div
-        className="h-20 w-28 overflow-hidden rounded-xl ring-1 ring-slate-100"
+        className="h-16 w-16 overflow-hidden rounded-xl ring-1 ring-slate-100 sm:h-20 sm:w-28"
         style={{ background: gradientFor(gradientSeed) }}
         title={seed || city || ''}
       >
@@ -62,7 +62,10 @@ function MediaThumb({ city, seed, override, overrideAttribution }) {
         )}
       </div>
       {src && attribution && (
-        <p className="mt-0.5 w-28 truncate text-[10px] text-slate-400" title={`Photo: ${attribution}`}>
+        <p
+          className="mt-0.5 w-16 truncate text-[10px] text-slate-400 sm:w-28"
+          title={`Photo: ${attribution}`}
+        >
           Photo: {attribution}
         </p>
       )}
