@@ -13,21 +13,29 @@ export function googleMapsKey() {
 /** Whether Google Maps/Places features are available (a key is configured). */
 export const placesAvailable = () => !!googleMapsKey();
 
-let loaderInstance = null;
+let loaderModulePromise = null;
 const libCache = {};
 
-// One Loader for the whole app (creating it twice with different options warns).
-// The loader package is imported DYNAMICALLY so this module has no top-level
-// browser (`window`) dependency — it stays safe to import in Node (server code,
-// tests) and only pulls the SDK in the browser when a feature actually runs.
-async function loader() {
+// Load @googlemaps/js-api-loader (v2 functional API: setOptions + importLibrary;
+// the old `Loader` class was removed) and call setOptions ONCE. Imported
+// DYNAMICALLY so this module has no top-level browser (`window`) dependency — it
+// stays safe to import in Node (server code, tests) and only pulls the SDK in the
+// browser when a feature actually runs. Returns the module, or null without a key.
+function loaderModule() {
   const apiKey = googleMapsKey();
-  if (!apiKey) return null;
-  if (!loaderInstance) {
-    const { Loader } = await import('@googlemaps/js-api-loader');
-    loaderInstance = new Loader({ apiKey, version: 'weekly' });
+  if (!apiKey) return Promise.resolve(null);
+  if (!loaderModulePromise) {
+    loaderModulePromise = import('@googlemaps/js-api-loader')
+      .then((mod) => {
+        mod.setOptions({ key: apiKey, v: 'weekly' });
+        return mod;
+      })
+      .catch((err) => {
+        loaderModulePromise = null; // allow a later retry
+        throw err;
+      });
   }
-  return loaderInstance;
+  return loaderModulePromise;
 }
 
 /**
@@ -39,9 +47,9 @@ async function loader() {
 export function importGoogleLib(name) {
   if (!libCache[name]) {
     libCache[name] = (async () => {
-      const l = await loader();
-      if (!l) throw new Error('Google Maps key not configured');
-      return l.importLibrary(name);
+      const mod = await loaderModule();
+      if (!mod) throw new Error('Google Maps key not configured');
+      return mod.importLibrary(name);
     })().catch((err) => {
       delete libCache[name]; // allow a later retry
       throw err;

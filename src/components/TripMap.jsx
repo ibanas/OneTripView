@@ -271,8 +271,14 @@ export default function TripMap({ stops, places = [] }) {
           if (cancelled || !container.isConnected) return;
           cleanup = buildGoogleMap(google, container, data);
           return;
-        } catch {
-          /* SDK failed to load — fall back to OSM */
+        } catch (err) {
+          // Don't fail silently — surface WHY we fell back so a misconfigured
+          // key (API not enabled / referrer blocked / billing off / blocked
+          // network) is diagnosable instead of looking like "Google didn't work".
+          console.warn(
+            '[TripMap] Google Maps failed to load — falling back to OpenStreetMap. Reason:',
+            err
+          );
         }
       }
       if (cancelled || !container.isConnected) return;
