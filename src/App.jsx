@@ -56,6 +56,7 @@ import { extractBookingsFromPdf } from './lib/extract.js';
 import { exportToExcel } from './lib/exportExcel.js';
 import { exportToPdf } from './lib/exportPdf.js';
 import { exportBackup, readBackup } from './lib/backup.js';
+import { downloadPlacesKml, downloadPlacesCsv } from './lib/exportPlaces.js';
 import { cryptoAvailable } from './lib/crypto.js';
 import {
   getSyncCode,
@@ -658,6 +659,28 @@ export default function App() {
               <>
                 {placePins.length > 0 && (
                   <TripMap stops={[]} places={placePins} onAddPlace={addPlaceFromMap} />
+                )}
+                {placePins.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white p-3 shadow-card ring-1 ring-slate-100">
+                    <span className="mr-auto text-xs text-slate-500">
+                      Send {placePins.length} place{placePins.length === 1 ? '' : 's'} to Google
+                      My&nbsp;Maps:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => downloadPlacesKml(placePins, activeTrip?.name || destination || 'trip')}
+                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                    >
+                      Download KML
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadPlacesCsv(placePins, activeTrip?.name || destination || 'trip')}
+                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                    >
+                      Download CSV
+                    </button>
+                  </div>
                 )}
                 {placePins.length > 0 ? (
                   <PlacesToCheck
